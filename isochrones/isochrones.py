@@ -5,7 +5,14 @@ import geopandas as gpd
 
 
 def calculate_isochrones(
-    lat: float, lon: float, cutoffSec: list[int], date_time: datetime.datetime
+    lat: float,
+    lon: float,
+    cutoffSec: list[int],
+    date_time: datetime.datetime,
+    ssl: bool,
+    hostname: str,
+    port: int,
+    router: str,
 ):
     coordinates = f"{lat},{lon}"
     date = date_time.strftime("%m-%d-%Y")  # Format as MM-DD-YYYY
@@ -19,7 +26,10 @@ def calculate_isochrones(
         "cutoffSec": [str(sec) for sec in cutoffSec],
     }
 
-    r = requests.get("http://localhost:8080/otp/routers/main/isochrone", params=payload)
+    # create the url by combining the hostname, port, and router
+    url = f"{'https' if ssl else 'http'}://{hostname}:{port}/otp/routers/{router}/isochrone"
+
+    r = requests.get(url, params=payload)
 
     if r.status_code != 200:
         raise RuntimeError(f"Failed to retrieve isochrones: {r.status_code}")
