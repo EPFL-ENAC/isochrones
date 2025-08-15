@@ -10,7 +10,10 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-example = ["matplotlib>=3.10.5"]
+example = [
+  "matplotlib>=3.10.5",
+  "numpy>=2.3.2",
+]
 
 dev = [
   "pre-commit>=4.3.0",
