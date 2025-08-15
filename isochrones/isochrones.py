@@ -14,6 +14,22 @@ def calculate_isochrones(
     port: int,
     router: str,
 ):
+    """
+    Calculate isochrones for a given location and time.
+
+    Args:
+        lat (float): Latitude of the location.
+        lon (float): Longitude of the location.
+        cutoffSec (list[int]): List of cutoff times in seconds.
+        date_time (datetime.datetime): The date and time for the isochrone calculation.
+        ssl (bool): Whether to use SSL for the request.
+        hostname (str): The hostname of the OTP server.
+        port (int): The port of the OTP server.
+        router (str): The router ID to use for the request.
+
+    Returns:
+        gpd.GeoDataFrame: A GeoDataFrame containing the isochrones.
+    """
     coordinates = f"{lat},{lon}"
     date = date_time.strftime("%m-%d-%Y")  # Format as MM-DD-YYYY
     time = date_time.strftime("%I:%M%p")  # Format as HH:MM pm/am
