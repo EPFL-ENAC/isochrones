@@ -13,7 +13,7 @@ def calculate_isochrones(
     hostname: str,
     port: int,
     router: str,
-):
+) -> gpd.GeoDataFrame:
     """
     Calculate isochrones for a given location and time.
 
@@ -51,3 +51,19 @@ def calculate_isochrones(
         raise RuntimeError(f"Failed to retrieve isochrones: {r.status_code}")
 
     return gpd.GeoDataFrame.from_features(r.json()["features"])
+
+
+def intersect_isochrones(
+    isochrones: gpd.GeoDataFrame, points: gpd.GeoDataFrame
+) -> gpd.GeoDataFrame:
+    """
+    Intersect isochrones with geographical points of interest.
+
+    Args:
+        isochrones (gpd.GeoDataFrame): The isochrones GeoDataFrame.
+        points (gpd.GeoDataFrame): The random points GeoDataFrame.
+
+    Returns:
+        gpd.GeoDataFrame: The intersected GeoDataFrame.
+    """
+    return gpd.overlay(points, isochrones, how="intersection")
