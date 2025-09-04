@@ -13,6 +13,7 @@ dependencies = [
 example = [
   "matplotlib>=3.10.5",
   "numpy>=2.3.2",
+  "contextily>=1.6.2",
 ]
 
 dev = [
