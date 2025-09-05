@@ -8,6 +8,23 @@ def get_osm_features(
     tags: Dict[str, bool],
     crs: str = "EPSG:3857",
 ) -> gpd.GeoDataFrame:
+    """
+    Get OSM features within a bounding box.
+
+    This function retrieves OpenStreetMap (OSM) features based on the specified
+    tags and bounding box. The retrieved features are returned as a GeoDataFrame
+    in long format, with one row per feature. For line, polygons and
+    multipolygons, the geometries are represented as their centroid.
+
+    Args:
+        bounding_box (tuple): A tuple of (north, south, east, west) coordinates.
+        tags (Dict[str, bool]): A dictionary of OSM tags to filter features.
+        crs (str): The coordinate reference system for the output GeoDataFrame.
+
+    Returns:
+        gpd.GeoDataFrame: A GeoDataFrame containing the OSM features within the
+        bounding box.
+    """
     # Get OSM features within the bounding box
     gdf = osmnx.features.features_from_bbox(bounding_box, tags)
 
