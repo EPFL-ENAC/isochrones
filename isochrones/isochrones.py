@@ -13,6 +13,7 @@ def calculate_isochrones(
     hostname: str,
     port: int,
     router: str,
+    mode: str,
 ) -> gpd.GeoDataFrame:
     """
     Calculate isochrones for a given location and time.
@@ -67,3 +68,31 @@ def intersect_isochrones(
         gpd.GeoDataFrame: The intersected GeoDataFrame.
     """
     return gpd.overlay(points, isochrones, how="intersection")
+
+
+def get_available_modes(
+    ssl: bool, hostname: str, port: int, router: str
+) -> Dict[str, str]:
+    """
+    Get available travel modes from the OTP server.
+
+    Args:
+        ssl (bool): Whether to use SSL for the request.
+        hostname (str): The hostname of the OTP server.
+        port (int): The port of the OTP server.
+        router (str): The router ID to use for the request.
+
+    Returns:
+        Dict[str, str]: A dictionary of available travel modes.
+    """
+    url = f"{'https' if ssl else 'http'}://{hostname}:{port}/otp/routers/{router}"
+
+    r = requests.get(url)
+
+    if r.status_code != 200:
+        raise RuntimeError(
+            f"Failed to retrieve available modes: {r.status_code} - {r.text}"
+        )
+
+    travel_options = r.json()["travelOptions"]
+    return {item["name"]: item["value"] for item in travel_options}
