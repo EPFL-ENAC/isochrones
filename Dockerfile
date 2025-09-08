@@ -7,4 +7,4 @@ RUN wget https://repo1.maven.org/maven2/org/opentripplanner/otp/1.5.0/otp-1.5.0-
 
 EXPOSE 8080
 ENTRYPOINT ["java", "-Xmx8G", "-jar", "otp.jar", "--server", "--port", "8080", "--analyst", "--graphs", "graphs"]
-CMD ["--router", "${ROUTER_NAME}"]
+CMD ["--router", "default"]
