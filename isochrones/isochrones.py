@@ -14,6 +14,7 @@ def calculate_isochrones(
     port: int,
     router: str,
     mode: str,
+    crs: str = "EPSG:4326",
 ) -> gpd.GeoDataFrame:
     """
     Calculate isochrones for a given location and time.
@@ -58,7 +59,10 @@ def calculate_isochrones(
     if r.status_code != 200:
         raise RuntimeError(f"Failed to retrieve isochrones: {r.status_code} - {r.text}")
 
-    return gpd.GeoDataFrame.from_features(r.json()["features"])
+    isochrone = gpd.GeoDataFrame.from_features(r.json()["features"])
+    isochrone.crs = crs
+
+    return isochrone
 
 
 def intersect_isochrones(
