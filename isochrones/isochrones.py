@@ -35,6 +35,13 @@ def calculate_isochrones(
     date = date_time.strftime("%m-%d-%Y")  # Format as MM-DD-YYYY
     time = date_time.strftime("%I:%M%p")  # Format as HH:MM pm/am
 
+    # check that mode is in the keys of the available modes
+    available_modes = get_available_modes(ssl, hostname, port, router)
+    if mode not in available_modes.keys():
+        raise ValueError(
+            f"Mode '{mode}' is not available. Available modes are: {list(available_modes.keys())}"
+        )
+
     payload: Dict[str, Union[str, List[str]]] = {
         "fromPlace": coordinates,
         "toPlace": coordinates,
