@@ -17,7 +17,7 @@ def get_osm_features(
     multipolygons, the geometries are represented as their centroid.
 
     Args:
-        bounding_box (tuple): A tuple of (north, south, east, west) coordinates.
+        bounding_box (tuple): A tuple of (west, south, east, north) coordinates.
         tags (Dict[str, bool]): A dictionary of OSM tags to filter features.
         crs (str): The coordinate reference system for the output GeoDataFrame.
 
@@ -25,6 +25,13 @@ def get_osm_features(
         gpd.GeoDataFrame: A GeoDataFrame containing the OSM features within the
         bounding box.
     """
+
+    # Validate bounding box length
+    if not (isinstance(bounding_box, (tuple, list)) and len(bounding_box) == 4):
+        raise ValueError(
+            "bounding_box must be a tuple or list of exactly 4 elements: (west, south, east, north)"
+        )
+
     # Get OSM features within the bounding box
     gdf = osmnx.features.features_from_bbox(bounding_box, tags)
 
