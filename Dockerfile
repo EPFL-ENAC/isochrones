@@ -6,4 +6,5 @@ WORKDIR /opt/otp
 RUN wget https://repo1.maven.org/maven2/org/opentripplanner/otp/1.5.0/otp-1.5.0-shaded.jar -O otp.jar
 
 EXPOSE 8080
-CMD ["java", "-Xmx2G", "-jar", "otp.jar", "--server", "--port", "8080", "--analyst", "--router", "main", "--graphs", "graphs"]
+ENTRYPOINT ["java", "-Xmx8G", "-jar", "otp.jar", "--server", "--port", "8080", "--analyst", "--graphs", "graphs"]
+CMD ["--router", "${ROUTER_NAME}"]

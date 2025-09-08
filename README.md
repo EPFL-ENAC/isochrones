@@ -5,10 +5,7 @@ _Package to generate isochrones using OpenTripPlanner_
 
 ## Requirements
 
-- [uv](https://docs.astral.sh/uv/) Python package and project manager
-- [git](https://git-scm.com/) version control system
-- [Docker](https://www.docker.com/) container platform
-
+- A running [OpenTripPlanner](https://www.opentripplanner.org/) server, version 1.5, with an associated graph
 
 ## Installation
 
@@ -19,7 +16,6 @@ Then, run the following command to install Isochrones:
 uv tool install isochrones
 ```
 
-
 ## Docker
 
 To run the Docker container, you can use the provided `Dockerfile`. Build the image with:
@@ -27,8 +23,9 @@ To run the Docker container, you can use the provided `Dockerfile`. Build the im
 docker build -t your-image-name .
 ```
 
-Then, run the container with the following command, specifying the location of the subfolder containing the graph data:
+
+Then, run the container with the following command, specifying the location of the subfolder containing the graph data, as well as the router name:
 
 ```bash
-docker run -p 8080:8080 -v /path/to/your/graphs:/opt/otp/graphs your-image-name
+docker run -p 8080:8080 -v /path/to/your/graphs:/opt/otp/graphs -p 8080:8080 your-image-name --router router_name
 ```
