@@ -48,7 +48,7 @@ def calculate_isochrones(
     r = requests.get(url, params=payload)
 
     if r.status_code != 200:
-        raise RuntimeError(f"Failed to retrieve isochrones: {r.status_code}")
+        raise RuntimeError(f"Failed to retrieve isochrones: {r.status_code} - {r.text}")
 
     return gpd.GeoDataFrame.from_features(r.json()["features"])
 
