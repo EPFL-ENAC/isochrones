@@ -9,10 +9,9 @@ def calculate_isochrones(
     lon: float,
     cutoffSec: list[int],
     date_time: datetime.datetime,
-    ssl: bool,
-    hostname: str,
-    port: int,
-    router: str,
+    otp_url: str,
+    api_key: str = None,
+    router: str = "default",
 ) -> gpd.GeoDataFrame:
     """
     Calculate isochrones for a given location and time.
@@ -22,10 +21,9 @@ def calculate_isochrones(
         lon (float): Longitude of the location.
         cutoffSec (list[int]): List of cutoff times in seconds.
         date_time (datetime.datetime): The date and time for the isochrone calculation.
-        ssl (bool): Whether to use SSL for the request.
-        hostname (str): The hostname of the OTP server.
-        port (int): The port of the OTP server.
-        router (str): The router ID to use for the request.
+        otp_url (str): The base URL of the OTP server.
+        api_key (str, optional): The API key for authentication.
+        router (str, optional): The router ID to use for the request, defaulting to "default".
 
     Returns:
         gpd.GeoDataFrame: A GeoDataFrame containing the isochrones.
@@ -42,10 +40,11 @@ def calculate_isochrones(
         "cutoffSec": [str(sec) for sec in cutoffSec],
     }
 
-    # create the url by combining the hostname, port, and router
-    url = f"{'https' if ssl else 'http'}://{hostname}:{port}/otp/routers/{router}/isochrone"
+    # create the url by combining the base OTP url, and router
+    url = f"{otp_url}/otp/routers/{router}/isochrone"
 
-    r = requests.get(url, params=payload)
+    headers = {"x-api-key": api_key} if api_key is not None else None
+    r = requests.get(url, params=payload, headers=headers)
 
     if r.status_code != 200:
         raise RuntimeError(f"Failed to retrieve isochrones: {r.status_code} - {r.text}")
