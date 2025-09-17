@@ -23,6 +23,9 @@ uv pip install -e .
 Stable version:
 
 ```bash
+# Replace TAG with the desired version or tag, e.g. v1.2.3
+uv pip install git+https://github.com/EPFL-ENAC/isochrones.git@v1.2.3
+# or
 uv pip install git+https://github.com/EPFL-ENAC/isochrones.git@TAG
 ```
 
