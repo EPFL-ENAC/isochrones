@@ -1,4 +1,7 @@
 # Isochrones
+
+[![CI](https://github.com/EPFL-ENAC/isochrones/actions/workflows/ci.yml/badge.svg)](https://github.com/EPFL-ENAC/isochrones/actions/workflows/ci.yml)
+
 _Package to generate isochrones using OpenTripPlanner_
 
 # 🐇 Quick start
@@ -7,15 +10,27 @@ _Package to generate isochrones using OpenTripPlanner_
 
 - A running [OpenTripPlanner](https://www.opentripplanner.org/) server, version 1.5, with an associated graph.
 
-## Docker
+See the project [LASUR OTP](https://github.com/EPFL-ENAC/lasur-otp) to build and run a local OTP server.
 
-To run the Docker container, you can use the provided `Dockerfile`. Build the image with:
+## Installation
+
+Development version:
+
 ```bash
-docker build -t your-image-name .
+uv pip install -e .
 ```
 
-Then, run the container with the following command, specifying the location of the subfolder containing the graph data, as well as the router name:
+Stable version:
 
 ```bash
-docker run -p 8080:8080 -v /path/to/your/graphs:/opt/otp/graphs your-image-name --router router_name
+# Replace TAG with the desired version or tag, e.g. v1.2.3
+uv pip install git+https://github.com/EPFL-ENAC/isochrones.git@v1.2.3
+# or
+uv pip install git+https://github.com/EPFL-ENAC/isochrones.git@TAG
+```
+
+# Usage
+
+```python
+from isochrones import calculate_isochrones, intersect_isochrones, get_osm_features
 ```
