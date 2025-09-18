@@ -14,13 +14,27 @@ See the project [LASUR OTP](https://github.com/EPFL-ENAC/lasur-otp) to build and
 
 ## Installation
 
-Development version:
+### Development version
 
 ```bash
 uv pip install -e .
 ```
 
-Stable version:
+To install the dependencies required to run the example notebook, use
+
+```bash
+uv pip install -e .[example]
+```
+
+or
+
+```bash
+uv pip install -e '.[example]'
+```
+
+if you are on macOS.
+
+### Stable version:
 
 ```bash
 # Replace TAG with the desired version or tag, e.g. v1.2.3
