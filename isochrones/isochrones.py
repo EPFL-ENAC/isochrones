@@ -1,5 +1,5 @@
 import datetime
-from typing import Dict, List, Union
+from typing import Dict, List, Union, Optional
 import requests
 import geopandas as gpd
 
@@ -9,11 +9,10 @@ def calculate_isochrones(
     lon: float,
     cutoffSec: list[int],
     date_time: datetime.datetime,
-    ssl: bool,
-    hostname: str,
-    port: int,
-    router: str,
     mode: str,
+    otp_url: str,
+    api_key: Optional[str] = None,
+    router: str = "default",
     crs: str = "EPSG:4326",
 ) -> gpd.GeoDataFrame:
     """
@@ -24,10 +23,9 @@ def calculate_isochrones(
         lon (float): Longitude of the location.
         cutoffSec (list[int]): List of cutoff times in seconds.
         date_time (datetime.datetime): The date and time for the isochrone calculation.
-        ssl (bool): Whether to use SSL for the request.
-        hostname (str): The hostname of the OTP server.
-        port (int): The port of the OTP server.
-        router (str): The router ID to use for the request.
+        otp_url (str): The base URL of the OTP server.
+        api_key (str, optional): The API key for authentication.
+        router (str, optional): The router ID to use for the request, defaulting to "default".
 
     Returns:
         gpd.GeoDataFrame: A GeoDataFrame containing the isochrones.
@@ -37,24 +35,27 @@ def calculate_isochrones(
     time = date_time.strftime("%I:%M%p")  # Format as HH:MM pm/am
 
     # check that mode is in the keys of the available modes
-    available_modes = get_available_modes(ssl, hostname, port, router)
+    available_modes = get_available_modes(otp_url, router, api_key)
     if mode not in available_modes.keys():
         raise ValueError(
             f"Mode '{mode}' is not available. Available modes are: {list(available_modes.keys())}"
         )
 
-    payload: Dict[str, Union[str, List[str]]] = {
+    payload: Dict[str, Union[str, List[str], bool]] = {
         "fromPlace": coordinates,
         "toPlace": coordinates,
         "date": date,
         "time": time,
         "cutoffSec": [str(sec) for sec in cutoffSec],
+        "mode": mode,
+        "arriveBy": True,
     }
 
-    # create the url by combining the hostname, port, and router
-    url = f"{'https' if ssl else 'http'}://{hostname}:{port}/otp/routers/{router}/isochrone"
+    # create the url by combining the base OTP url, and router
+    url = f"{otp_url}/otp/routers/{router}/isochrone"
 
-    r = requests.get(url, params=payload)
+    headers = {"x-api-key": api_key} if api_key is not None else None
+    r = requests.get(url, params=payload, headers=headers)
 
     if r.status_code != 200:
         raise RuntimeError(f"Failed to retrieve isochrones: {r.status_code} - {r.text}")
@@ -82,7 +83,7 @@ def intersect_isochrones(
 
 
 def get_available_modes(
-    ssl: bool, hostname: str, port: int, router: str
+    otp_url: str, router: str = "default", api_key: Optional[str] = None
 ) -> Dict[str, str]:
     """
     Get available travel modes from the OTP server.
@@ -96,9 +97,10 @@ def get_available_modes(
     Returns:
         Dict[str, str]: A dictionary of available travel modes.
     """
-    url = f"{'https' if ssl else 'http'}://{hostname}:{port}/otp/routers/{router}"
+    url = f"{otp_url}/otp/routers/{router}"
+    headers = {"x-api-key": api_key} if api_key is not None else None
 
-    r = requests.get(url)
+    r = requests.get(url, headers=headers)
 
     if r.status_code != 200:
         raise RuntimeError(
