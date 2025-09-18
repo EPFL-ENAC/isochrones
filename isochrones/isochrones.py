@@ -23,6 +23,7 @@ def calculate_isochrones(
         lon (float): Longitude of the location.
         cutoffSec (list[int]): List of cutoff times in seconds.
         date_time (datetime.datetime): The date and time for the isochrone calculation.
+        mode (str): The travel mode (e.g., "WALK", "BICYCLE", "TRANSIT"). Will be checked against available modes from the OTP server.
         otp_url (str): The base URL of the OTP server.
         api_key (str, optional): The API key for authentication.
         router (str, optional): The router ID to use for the request, defaulting to "default".
@@ -89,10 +90,9 @@ def get_available_modes(
     Get available travel modes from the OTP server.
 
     Args:
-        ssl (bool): Whether to use SSL for the request.
-        hostname (str): The hostname of the OTP server.
-        port (int): The port of the OTP server.
-        router (str): The router ID to use for the request.
+        otp_url (str): The base URL of the OTP server.
+        router (str, optional): The router ID to use for the request, defaulting to "default".
+        api_key (str, optional): The API key for authentication.
 
     Returns:
         Dict[str, str]: A dictionary of available travel modes.
