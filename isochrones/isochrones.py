@@ -10,9 +10,9 @@ def calculate_isochrones(
     cutoffSec: list[int],
     date_time: datetime.datetime,
     mode: str,
-    bike_speed: float,
     otp_url: str,
     api_key: Optional[str] = None,
+    bike_speed: float = 13.0,
     router: str = "default",
     crs: str = "EPSG:4326",
 ) -> gpd.GeoDataFrame:
@@ -25,11 +25,12 @@ def calculate_isochrones(
         cutoffSec (list[int]): List of cutoff times in seconds.
         date_time (datetime.datetime): The date and time for the isochrone calculation. This is considered to be the time of departure (arriveBy = False)
         mode (str): The travel mode (e.g., "WALK", "BICYCLE", "TRANSIT"). Will be checked against available modes from the OTP server.
-        bike_speed (float): The bike speed in km/h, only relevant if mode is "BICYCLE".
         If the mode is not available, a ValueError will be raised.
         otp_url (str): The base URL of the OTP server.
         api_key (str, optional): The API key for authentication.
+        bike_speed (float): The bike speed in km/h, only relevant if mode is "BICYCLE".
         router (str, optional): The router ID to use for the request, defaulting to "default".
+        crs (str, optional): The coordinate reference system for the output GeoDataFrame, defaulting to "EPSG:4326".
 
     Returns:
         gpd.GeoDataFrame: A GeoDataFrame containing the isochrones.
