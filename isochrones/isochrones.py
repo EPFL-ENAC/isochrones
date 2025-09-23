@@ -10,6 +10,7 @@ def calculate_isochrones(
     cutoffSec: list[int],
     date_time: datetime.datetime,
     mode: str,
+    bike_speed: float,
     otp_url: str,
     api_key: Optional[str] = None,
     router: str = "default",
@@ -24,6 +25,7 @@ def calculate_isochrones(
         cutoffSec (list[int]): List of cutoff times in seconds.
         date_time (datetime.datetime): The date and time for the isochrone calculation. This is considered to be the time of departure (arriveBy = False)
         mode (str): The travel mode (e.g., "WALK", "BICYCLE", "TRANSIT"). Will be checked against available modes from the OTP server.
+        bike_speed (float): The bike speed in km/h, only relevant if mode is "BICYCLE".
         If the mode is not available, a ValueError will be raised.
         otp_url (str): The base URL of the OTP server.
         api_key (str, optional): The API key for authentication.
@@ -43,7 +45,7 @@ def calculate_isochrones(
             f"Mode '{mode}' is not available. Available modes are: {list(available_modes.keys())}"
         )
 
-    payload: Dict[str, Union[str, List[str], bool]] = {
+    payload: Dict[str, Union[str, List[str], bool, float]] = {
         "fromPlace": coordinates,
         "toPlace": coordinates,
         "date": date,
@@ -51,6 +53,7 @@ def calculate_isochrones(
         "cutoffSec": [str(sec) for sec in cutoffSec],
         "mode": mode,
         "arriveBy": False,
+        "bikeSpeed": bike_speed / 3.6,
     }
 
     # create the url by combining the base OTP url, and router
