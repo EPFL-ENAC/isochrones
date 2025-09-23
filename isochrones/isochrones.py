@@ -53,8 +53,11 @@ def calculate_isochrones(
         "cutoffSec": [str(sec) for sec in cutoffSec],
         "mode": mode,
         "arriveBy": False,
-        "bikeSpeed": bike_speed / 3.6,
     }
+
+    # Only include bikeSpeed if mode is BICYCLE
+    if mode.upper() == "BICYCLE":
+        payload["bikeSpeed"] = bike_speed / 3.6
 
     # create the url by combining the base OTP url, and router
     url = f"{otp_url}/otp/routers/{router}/isochrone"
