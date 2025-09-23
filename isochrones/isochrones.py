@@ -12,6 +12,7 @@ def calculate_isochrones(
     mode: str,
     otp_url: str,
     api_key: Optional[str] = None,
+    bike_speed: float = 13.0,
     router: str = "default",
     crs: str = "EPSG:4326",
 ) -> gpd.GeoDataFrame:
@@ -27,7 +28,9 @@ def calculate_isochrones(
         If the mode is not available, a ValueError will be raised.
         otp_url (str): The base URL of the OTP server.
         api_key (str, optional): The API key for authentication.
+        bike_speed (float): The bike speed in km/h, only relevant if mode is "BICYCLE".
         router (str, optional): The router ID to use for the request, defaulting to "default".
+        crs (str, optional): The coordinate reference system for the output GeoDataFrame, defaulting to "EPSG:4326".
 
     Returns:
         gpd.GeoDataFrame: A GeoDataFrame containing the isochrones.
@@ -43,7 +46,7 @@ def calculate_isochrones(
             f"Mode '{mode}' is not available. Available modes are: {list(available_modes.keys())}"
         )
 
-    payload: Dict[str, Union[str, List[str], bool]] = {
+    payload: Dict[str, Union[str, List[str], bool, float]] = {
         "fromPlace": coordinates,
         "toPlace": coordinates,
         "date": date,
@@ -52,6 +55,10 @@ def calculate_isochrones(
         "mode": mode,
         "arriveBy": False,
     }
+
+    # Only include bikeSpeed if mode is BICYCLE
+    if mode.upper() == "BICYCLE":
+        payload["bikeSpeed"] = bike_speed / 3.6
 
     # create the url by combining the base OTP url, and router
     url = f"{otp_url}/otp/routers/{router}/isochrone"
