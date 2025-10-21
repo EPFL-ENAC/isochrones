@@ -52,7 +52,7 @@ def calculate_isochrones(
         "date": date,
         "time": time,
         "cutoffSec": [str(sec) for sec in cutoffSec],
-        "mode": mode,
+        "mode": available_modes[mode],
         "arriveBy": False,
     }
 
