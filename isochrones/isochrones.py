@@ -79,7 +79,7 @@ def calculate_isochrones(
         # Iterate from the largest isochrone down to the second smallest
         for i in range(len(isochrone) - 1, 0, -1):
             # Subtract the smaller isochrone from the larger one
-            isochrone.loc[i, "geometry"] = isochrone.loc[i, "geometry"].difference(
+            isochrone.at[i, "geometry"] = isochrone.loc[i, "geometry"].difference(
                 isochrone.loc[i - 1, "geometry"]
             )
 
