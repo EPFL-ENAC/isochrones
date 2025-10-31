@@ -17,7 +17,8 @@ def calculate_isochrones(
     crs: str = "EPSG:4326",
 ) -> gpd.GeoDataFrame:
     """
-    Calculate isochrones for a given location and time.
+    Calculate isochrones for a given location and time. The isochrones returned are non-overlapping polygons
+    representing areas reachable within specified cutoff times.
 
     Args:
         lat (float): Latitude of the location.
@@ -71,6 +72,16 @@ def calculate_isochrones(
 
     isochrone = gpd.GeoDataFrame.from_features(r.json()["features"])
     isochrone.crs = crs
+
+    if len(cutoffSec) > 1:
+        # Sort by time to ensure correct order for difference calculation
+        isochrone = isochrone.sort_values("time").reset_index(drop=True)
+        # Iterate from the largest isochrone down to the second smallest
+        for i in range(len(isochrone) - 1, 0, -1):
+            # Subtract the smaller isochrone from the larger one
+            isochrone.loc[i, "geometry"] = isochrone.loc[i, "geometry"].difference(
+                isochrone.loc[i - 1, "geometry"]
+            )
 
     return isochrone
 
