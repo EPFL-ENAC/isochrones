@@ -15,6 +15,7 @@ def calculate_isochrones(
     bike_speed: float = 13.0,
     router: str = "default",
     crs: str = "EPSG:4326",
+    overlap: bool = True,
 ) -> gpd.GeoDataFrame:
     """
     Calculate isochrones for a given location and time. The isochrones returned are non-overlapping polygons
@@ -32,6 +33,7 @@ def calculate_isochrones(
         bike_speed (float): The bike speed in km/h, only relevant if mode is "BICYCLE".
         router (str, optional): The router ID to use for the request, defaulting to "default".
         crs (str, optional): The coordinate reference system for the output GeoDataFrame, defaulting to "EPSG:4326".
+        overlap (bool, optional): Whether to return overlapping isochrones or non-overlapping ones. Defaults to True.
 
     Returns:
         gpd.GeoDataFrame: A GeoDataFrame containing the isochrones.
@@ -73,7 +75,7 @@ def calculate_isochrones(
     isochrone = gpd.GeoDataFrame.from_features(r.json()["features"])
     isochrone.crs = crs
 
-    if len(cutoffSec) > 1:
+    if not overlap and len(cutoffSec) > 1:
         # Sort by time to ensure correct order for difference calculation
         isochrone = isochrone.sort_values("time").reset_index(drop=True)
         # Iterate from the largest isochrone down to the second smallest
