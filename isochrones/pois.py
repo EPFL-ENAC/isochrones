@@ -1,9 +1,10 @@
 import os
+import re
 import osmnx
 from typing import Dict, Optional
 import geopandas as gpd
-
-from .osm import BBoxFeatureHandler
+import pyogrio
+import pandas as pd
 
 
 def get_osm_features(
@@ -45,26 +46,32 @@ def get_osm_features(
 
     # If a local OSM PBF is provided and exists, use the pyosmium handler
     if osm_pbf_path and os.path.exists(osm_pbf_path):
-        handler = BBoxFeatureHandler(bounding_box, tags)
-        # require node locations
-        handler.apply_file(osm_pbf_path, locations=True)
-    
-        if not handler.features:
-            # return empty GeoDataFrame with the requested CRS
-            return gpd.GeoDataFrame(columns=["osm_type", "osm_id", "geometry", "variable", "value"], geometry="geometry", crs=crs)
-
-        # Build GeoDataFrame from handler features (pyosmium yields lon/lat -> EPSG:4326)
-        rows = []
-        for feat in handler.features:
-            geom = feat["geometry"]
-            row = {"geometry": geom, "osm_type": feat.get("osm_type"), "osm_id": feat.get("osm_id")}
-            # flatten tags into columns
-            for k, v in feat.get("tags", {}).items():
-                row[k.lower()] = v
-            rows.append(row)
-
-        gdf = gpd.GeoDataFrame(rows, crs="EPSG:4326")
-
+        gdf = pyogrio.read_dataframe(
+            osm_pbf_path,
+            layer="points",
+            bbox=bounding_box,  
+        )
+        gdf["tags"] = gdf["other_tags"].apply(parse_osm_tags)
+        for col in ["amenity", "healthcare", "shop", "tourism", "office", "public_transport"]:
+            gdf[col] = gdf["tags"].apply(lambda d: d.get(col))
+            
+        # filter rows based on tags
+        def row_matches_tags(row, tags):
+            # Check if a row matches one of the specified tags
+            for key, value in tags.items():
+                tag_value = row.get(key)
+                if value is True:
+                    if tag_value is not None:
+                        return True 
+                elif isinstance(value, (list, tuple, set)):
+                    if tag_value in value:
+                        return True
+                else:
+                    if tag_value == value:
+                        return True
+            return False
+        gdf = gdf[gdf.apply(lambda row: row_matches_tags(row, tags), axis=1)]
+        
     else:
         # Fallback to osmnx.features.features_from_bbox when no pbf given
         # osmnx.features_from_bbox expects (north, south, east, west) in some versions;
@@ -109,10 +116,21 @@ def get_osm_features(
         pass
 
     # Convert polygons/lines to centroids
-    gdf["geometry"] = gdf["geometry"].centroid
+    gdf["geometry"] = gdf.geometry.representative_point()
 
     # Melt to long format for requested/existing tag columns
     gdf_long = gdf.melt(id_vars=id_names, value_vars=existing_tag_cols, var_name="variable", value_name="value")
     gdf_long = gdf_long[gdf_long["value"].notna()].reset_index(drop=True)
 
     return gdf_long
+
+def parse_osm_tags(tag_str):
+    if pd.isna(tag_str) or tag_str == "":
+        return {}
+    d = {}
+    # Split by comma, then split by =>
+    # handle quoted strings
+    for kv in re.findall(r'"([^"]+)"=>"(.*?)"', tag_str):
+        key, value = kv
+        d[key] = value
+    return d
