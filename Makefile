@@ -12,12 +12,12 @@ pbf: pbf-download pbf-merge
 pbf-download:
 	@rm -rf .data/geofabrik
 	@mkdir -p .data/geofabrik
-	wget https://download.geofabrik.de/europe/switzerland-latest.osm.pbf -O data/geofabrik/switzerland-latest.osm.pbf
-	wget https://download.geofabrik.de/europe/france/rhone-alpes-latest.osm.pbf -O data/geofabrik/rhone-alpes-latest.osm.pbf
-	wget https://download.geofabrik.de/europe/france/franche-comte-latest.osm.pbf -O data/geofabrik/franche-comte-latest.osm.pbf
-	wget https://download.geofabrik.de/europe/france/alsace-latest.osm.pbf -O data/geofabrik/alsace-latest.osm.pbf
-	wget https://download.geofabrik.de/europe/france/bourgogne-latest.osm.pbf -O data/geofabrik/bourgogne-latest.osm.pbf
-	wget https://download.geofabrik.de/europe/italy/nord-ovest-latest.osm.pbf -O data/geofabrik/italy-nord-ovest-latest.osm.pbf
+	wget https://download.geofabrik.de/europe/switzerland-latest.osm.pbf -O .data/geofabrik/switzerland-latest.osm.pbf
+	wget https://download.geofabrik.de/europe/france/rhone-alpes-latest.osm.pbf -O .data/geofabrik/rhone-alpes-latest.osm.pbf
+	wget https://download.geofabrik.de/europe/france/franche-comte-latest.osm.pbf -O .data/geofabrik/franche-comte-latest.osm.pbf
+	wget https://download.geofabrik.de/europe/france/alsace-latest.osm.pbf -O .data/geofabrik/alsace-latest.osm.pbf
+	wget https://download.geofabrik.de/europe/france/bourgogne-latest.osm.pbf -O .data/geofabrik/bourgogne-latest.osm.pbf
+	wget https://download.geofabrik.de/europe/italy/nord-ovest-latest.osm.pbf -O .data/geofabrik/italy-nord-ovest-latest.osm.pbf
 
 pbf-merge:
 	@rm -f .data/merged.osm.pbf

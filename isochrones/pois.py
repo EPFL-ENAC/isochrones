@@ -32,7 +32,7 @@ def get_osm_features(
                - None: key existence is enough
         crs (str): The coordinate reference system for the output GeoDataFrame.
         osm_pbf_path (str, optional): Path to a local .osm.pbf file. If provided and exists,
-            pyosmium-based BBoxFeatureHandler will be used. Otherwise falls back to osmnx.
+            pyogrio will be used to read the file. Otherwise falls back to osmnx.
 
     Returns:
         gpd.GeoDataFrame: A GeoDataFrame containing the OSM features within the
@@ -62,8 +62,12 @@ def get_osm_features(
             layer="points",
             bbox=bounding_box,  
         )
-        gdf["tags"] = gdf["other_tags"].apply(_parse_osm_tags)
-        for col in ["amenity", "healthcare", "shop", "tourism", "office", "public_transport"]:
+        if "other_tags" in gdf.columns:
+            gdf["tags"] = gdf["other_tags"].apply(_parse_osm_tags)
+        else:
+            # If "other_tags" is missing, fill "tags" with empty dicts
+            gdf["tags"] = [{} for _ in range(len(gdf))]
+        for col in tags.keys():
             gdf[col] = gdf["tags"].apply(lambda d: d.get(col))
             
         # filter rows based on tags
