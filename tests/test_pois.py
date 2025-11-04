@@ -9,17 +9,25 @@ tags = {"amenity": ["school", "hospital"]}
 #tags = {"shop": True}
 crs = "EPSG:4326"
     
-def test_get_osm_features_from_pbf():
-    osmData = os.path.join(os.path.dirname(__file__), "..", "data", "geneva-greater-area-filtered.osm.pbf")
-    print(osmData, file=sys.stderr)
-
+def test_get_osm_features_from_local_pbf():
+    osmData = os.path.join(os.path.dirname(__file__), "..", ".data", "geneva-greater-area-all.osm.pbf")
+    
     # Check osm data file exists
     if not os.path.exists(osmData):
-        pytest.skip("Test OSM PBF data file is missing.")
+        pytest.skip(f"Test OSM PBF data file is missing: {osmData}")
 
     gdf = get_osm_features(
         bounding_box=bbox,
         osm_pbf_path=osmData if os.path.exists(osmData) else None,
+        tags=tags,
+        crs=crs,
+    )
+    print(gdf, file=sys.stdout)
+
+def test_get_osm_features_from_package_pbf():
+    gdf = get_osm_features(
+        bounding_box=bbox,
+        osm_pbf_path="geneva-greater-area.osm.pbf",
         tags=tags,
         crs=crs,
     )

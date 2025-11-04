@@ -12,4 +12,4 @@ docs/auto_source
 
 .python-version
 cache/
-data/
+.data/

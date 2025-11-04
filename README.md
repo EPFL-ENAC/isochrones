@@ -55,3 +55,11 @@ uv run pytest -q
 ```python
 from isochrones import calculate_isochrones, intersect_isochrones, get_osm_features
 ```
+
+# Development
+
+Generate Geneva OSM PBF file:
+
+```bash
+make pbf pbf-geneva
+```

@@ -1,6 +1,7 @@
 import os
 import re
 import osmnx
+from importlib.resources import files
 from typing import Dict, Optional
 import geopandas as gpd
 import pyogrio
@@ -43,15 +44,25 @@ def get_osm_features(
         raise ValueError(
             "bounding_box must be a tuple or list of exactly 4 elements: (west, south, east, north)"
         )
+    
+    data_file_path = osm_pbf_path
+    if osm_pbf_path and not os.path.exists(osm_pbf_path):
+        # Use importlib.resources to get the data file from the package
+        data_file = files("isochrones").joinpath("data", osm_pbf_path)
+        if data_file.is_file():
+            data_file_path = str(data_file)
+        else:
+            data_file_path = None
+
 
     # If a local OSM PBF is provided and exists, use the pyosmium handler
-    if osm_pbf_path and os.path.exists(osm_pbf_path):
+    if data_file_path and os.path.exists(data_file_path):
         gdf = pyogrio.read_dataframe(
-            osm_pbf_path,
+            data_file_path,
             layer="points",
             bbox=bounding_box,  
         )
-        gdf["tags"] = gdf["other_tags"].apply(parse_osm_tags)
+        gdf["tags"] = gdf["other_tags"].apply(_parse_osm_tags)
         for col in ["amenity", "healthcare", "shop", "tourism", "office", "public_transport"]:
             gdf[col] = gdf["tags"].apply(lambda d: d.get(col))
             
@@ -124,7 +135,15 @@ def get_osm_features(
 
     return gdf_long
 
-def parse_osm_tags(tag_str):
+def get_osm_files():
+    """
+    Get files in package data directory with .osm.pbf suffix.
+    """
+    return [
+        f.name for f in files("isochrones").joinpath("data").iterdir() if f.suffix == ".osm.pbf"
+    ]
+
+def _parse_osm_tags(tag_str):
     if pd.isna(tag_str) or tag_str == "":
         return {}
     d = {}
