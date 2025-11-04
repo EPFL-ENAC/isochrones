@@ -43,8 +43,23 @@ uv pip install git+https://github.com/EPFL-ENAC/isochrones.git@v1.2.3
 uv pip install git+https://github.com/EPFL-ENAC/isochrones.git@TAG
 ```
 
+# Run tests
+
+```bash
+uv pip install -e .[dev]
+uv run pytest -q
+```
+
 # Usage
 
 ```python
 from isochrones import calculate_isochrones, intersect_isochrones, get_osm_features
+```
+
+# Development
+
+Generate Geneva OSM PBF file:
+
+```bash
+make pbf pbf-geneva
 ```
