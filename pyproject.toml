@@ -1,6 +1,6 @@
 [project]
 name = "isochrones"
-version = "0.4.0"
+version = "0.4.1"
 description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -29,4 +29,15 @@ packages = ["isochrones"]
 [dependency-groups]
 dev = [
     "pytest>=8.4.2",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+
+[tool.hatch.build.targets.wheel]
+packages = ["isochrones"]
+include = [
+    "isochrones/data/*.pbf",
 ]
