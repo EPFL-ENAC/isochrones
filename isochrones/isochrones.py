@@ -2,6 +2,7 @@ import datetime
 from typing import Dict, List, Union, Optional
 import requests
 import geopandas as gpd
+from shapely.geometry import MultiPolygon, Polygon
 
 
 def calculate_isochrones(
@@ -16,10 +17,10 @@ def calculate_isochrones(
     router: str = "default",
     crs: str = "EPSG:4326",
     overlap: bool = True,
+    area_threshold: float = 1e-6,
 ) -> gpd.GeoDataFrame:
     """
-    Calculate isochrones for a given location and time. The isochrones returned are non-overlapping polygons
-    representing areas reachable within specified cutoff times.
+    Calculate isochrones for a given location and time.
 
     Args:
         lat (float): Latitude of the location.
@@ -34,7 +35,8 @@ def calculate_isochrones(
         router (str, optional): The router ID to use for the request, defaulting to "default".
         crs (str, optional): The coordinate reference system for the output GeoDataFrame, defaulting to "EPSG:4326".
         overlap (bool, optional): Whether to return overlapping isochrones or non-overlapping ones. Defaults to True.
-
+        area_threshold (float, optional): Minimum area threshold to filter out small polygons within the isochrones, expressed in the area units of the
+        specified CRS (e.g. degrees squared for EPSG:4326). Defaults to 1e-6.
     Returns:
         gpd.GeoDataFrame: A GeoDataFrame containing the isochrones.
     """
@@ -75,15 +77,64 @@ def calculate_isochrones(
     isochrone = gpd.GeoDataFrame.from_features(r.json()["features"])
     isochrone.crs = crs
 
-    if not overlap and len(cutoffSec) > 1:
-        # Sort by time to ensure correct order for difference calculation
-        isochrone = isochrone.sort_values("time").reset_index(drop=True)
-        # Iterate from the largest isochrone down to the second smallest
-        for i in range(len(isochrone) - 1, 0, -1):
-            # Subtract the smaller isochrone from the larger one
-            isochrone.at[i, "geometry"] = isochrone.loc[i, "geometry"].difference(
-                isochrone.loc[i - 1, "geometry"]
-            )
+    isochrone["geometry"] = isochrone["geometry"].map(
+        lambda geom: filter_small_polygons(geom, area_threshold)
+    )
+
+    if not overlap:
+        isochrone = make_non_overlapping(isochrone)
+
+    return isochrone
+
+
+def filter_small_polygons(
+    geom: Union[MultiPolygon, Polygon, None], min_area: float
+) -> Union[MultiPolygon, Polygon]:
+    """
+    Filter out small polygons from a MultiPolygon geometry based on an area threshold.
+
+    Args:
+        geom (Union[MultiPolygon, Polygon, None]): The geometry to filter.
+        min_area (float): The minimum area threshold.
+
+    Returns:
+        Union[MultiPolygon, Polygon, None]: The filtered geometry.
+    """
+    if geom is None:
+        return Polygon()  # Return an empty polygon if geometry is None
+    if isinstance(geom, MultiPolygon):
+        # Only filter out if there is more than one polygon
+        if len(geom.geoms) == 1:
+            return geom
+        filtered = [p for p in geom.geoms if p.area >= min_area]
+        if not filtered:
+            return Polygon()
+        return MultiPolygon(filtered)
+
+    return geom
+
+
+def make_non_overlapping(isochrone: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
+    """
+    Make isochrones non-overlapping by subtracting smaller availability zones from larger ones.
+
+    Args:
+        isochrone (gpd.GeoDataFrame): The isochrones GeoDataFrame.
+
+    Returns:
+        gpd.GeoDataFrame: The non-overlapping isochrones.
+    """
+    if len(isochrone) <= 1:
+        return isochrone
+
+    # Sort by time to ensure correct order for difference calculation
+    isochrone = isochrone.sort_values("time").reset_index(drop=True)
+    # Iterate from the largest isochrone down to the second smallest
+    for i in range(len(isochrone) - 1, 0, -1):
+        # Subtract the smaller isochrone from the larger one
+        isochrone.at[i, "geometry"] = isochrone.loc[i, "geometry"].difference(
+            isochrone.loc[i - 1, "geometry"]
+        )
 
     return isochrone
 
