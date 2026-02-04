@@ -77,6 +77,8 @@ def calculate_isochrones(
     isochrone = gpd.GeoDataFrame.from_features(r.json()["features"])
     isochrone.crs = crs
 
+    isochrone["geometry"] = isochrone["geometry"].buffer(0)
+
     isochrone["geometry"] = isochrone["geometry"].map(
         lambda geom: filter_small_polygons(geom, area_threshold)
     )
