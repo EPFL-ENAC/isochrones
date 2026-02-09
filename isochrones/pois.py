@@ -44,7 +44,7 @@ def get_osm_features(
         raise ValueError(
             "bounding_box must be a tuple or list of exactly 4 elements: (west, south, east, north)"
         )
-    
+
     data_file_path = osm_pbf_path
     if osm_pbf_path and not os.path.exists(osm_pbf_path):
         # Use importlib.resources to get the data file from the package
@@ -54,13 +54,12 @@ def get_osm_features(
         else:
             data_file_path = None
 
-
     # If a local OSM PBF is provided and exists, use the pyosmium handler
     if data_file_path and os.path.exists(data_file_path):
         gdf = pyogrio.read_dataframe(
             data_file_path,
             layer="points",
-            bbox=bounding_box,  
+            bbox=bounding_box,
         )
         if "other_tags" in gdf.columns:
             gdf["tags"] = gdf["other_tags"].apply(_parse_osm_tags)
@@ -69,7 +68,7 @@ def get_osm_features(
             gdf["tags"] = [{} for _ in range(len(gdf))]
         for col in tags.keys():
             gdf[col] = gdf["tags"].apply(lambda d: d.get(col))
-            
+
         # filter rows based on tags
         def row_matches_tags(row, tags):
             # Check if a row matches one of the specified tags
@@ -77,7 +76,7 @@ def get_osm_features(
                 tag_value = row.get(key)
                 if value is True:
                     if tag_value is not None:
-                        return True 
+                        return True
                 elif isinstance(value, (list, tuple, set)):
                     if tag_value in value:
                         return True
@@ -85,8 +84,9 @@ def get_osm_features(
                     if tag_value == value:
                         return True
             return False
+
         gdf = gdf[gdf.apply(lambda row: row_matches_tags(row, tags), axis=1)]
-        
+
     else:
         # Fallback to osmnx.features.features_from_bbox when no pbf given
         # osmnx.features_from_bbox expects (north, south, east, west) in some versions;
@@ -134,18 +134,27 @@ def get_osm_features(
     gdf["geometry"] = gdf.geometry.representative_point()
 
     # Melt to long format for requested/existing tag columns
-    gdf_long = gdf.melt(id_vars=id_names, value_vars=existing_tag_cols, var_name="variable", value_name="value")
+    gdf_long = gdf.melt(
+        id_vars=id_names,
+        value_vars=existing_tag_cols,
+        var_name="variable",
+        value_name="value",
+    )
     gdf_long = gdf_long[gdf_long["value"].notna()].reset_index(drop=True)
 
     return gdf_long
+
 
 def get_osm_files():
     """
     Get files in package data directory with .osm.pbf suffix.
     """
     return [
-        f.name for f in files("isochrones").joinpath("data").iterdir() if f.suffix == ".osm.pbf"
+        f.name
+        for f in files("isochrones").joinpath("data").iterdir()
+        if f.name.endswith(".osm.pbf")
     ]
+
 
 def _parse_osm_tags(tag_str):
     if pd.isna(tag_str) or tag_str == "":

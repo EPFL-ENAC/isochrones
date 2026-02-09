@@ -1,8 +1,12 @@
 import datetime
+import logging
 from typing import Dict, List, Union, Optional
 import requests
 import geopandas as gpd
+import shapely
 from shapely.geometry import MultiPolygon, Polygon
+
+logger = logging.getLogger(__name__)
 
 
 def calculate_isochrones(
@@ -34,7 +38,8 @@ def calculate_isochrones(
         bike_speed (float): The bike speed in km/h, only relevant if mode is "BICYCLE".
         router (str, optional): The router ID to use for the request, defaulting to "default".
         crs (str, optional): The coordinate reference system for the output GeoDataFrame, defaulting to "EPSG:4326".
-        overlap (bool, optional): Whether to return overlapping isochrones or non-overlapping ones. Defaults to True.
+        overlap (bool, optional): Whether to return overlapping isochrones or non-overlapping ones. If the calculation of non-overlapping
+        isochrones fails, overlapping isochrones will be returned instead. Defaults to True.
         area_threshold (float, optional): Minimum area threshold to filter out small polygons within the isochrones, expressed in the area units of the
         specified CRS (e.g. degrees squared for EPSG:4326). Defaults to 1e-6.
     Returns:
@@ -84,7 +89,14 @@ def calculate_isochrones(
     )
 
     if not overlap:
-        isochrone = make_non_overlapping(isochrone)
+        try:
+            isochrone = make_non_overlapping(isochrone)
+        except shapely.errors.GEOSException as e:
+            logger.warning(
+                f"Failed to make isochrones non-overlapping: {type(e).__name__}: {str(e)}. "
+                "Returning overlapping isochrones instead."
+            )
+            # Return original overlapping isochrone
 
     return isochrone
 
@@ -120,6 +132,11 @@ def make_non_overlapping(isochrone: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
     """
     Make isochrones non-overlapping by subtracting smaller availability zones from larger ones.
 
+    This function implements a dual-level error handling approach:
+    - Level 1: Attempts direct geometry difference operations
+    - Level 2: If direct difference fails, splits the smaller geometry into individual polygons
+      and attempts to subtract them one by one, skipping any problematic polygons
+
     Args:
         isochrone (gpd.GeoDataFrame): The isochrones GeoDataFrame.
 
@@ -131,12 +148,54 @@ def make_non_overlapping(isochrone: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
 
     # Sort by time to ensure correct order for difference calculation
     isochrone = isochrone.sort_values("time").reset_index(drop=True)
+
     # Iterate from the largest isochrone down to the second smallest
     for i in range(len(isochrone) - 1, 0, -1):
-        # Subtract the smaller isochrone from the larger one
-        isochrone.at[i, "geometry"] = isochrone.loc[i, "geometry"].difference(
-            isochrone.loc[i - 1, "geometry"]
-        )
+        try:
+            # Level 1: Attempt direct difference operation
+            isochrone.at[i, "geometry"] = isochrone.loc[i, "geometry"].difference(
+                isochrone.loc[i - 1, "geometry"]
+            )
+        except shapely.errors.GEOSException as e:
+            # Level 2: Polygon-level recovery
+            # The problematic geometry is usually the smaller_geom being subtracted
+            logger.warning(
+                f"Geometry difference failed for isochrone at index {i} (time={isochrone.loc[i, 'time']}): "
+                f"{type(e).__name__}: {str(e)}. Attempting polygon-level recovery."
+            )
+
+            larger_geom = isochrone.loc[i, "geometry"]
+            smaller_geom = isochrone.loc[i - 1, "geometry"]
+
+            # Extract individual polygons from the SMALLER geometry (the one being subtracted)
+            if isinstance(smaller_geom, MultiPolygon):
+                smaller_polygons = list(smaller_geom.geoms)
+            elif isinstance(smaller_geom, Polygon):
+                smaller_polygons = [smaller_geom]
+            else:
+                logger.warning(
+                    f"Unexpected smaller geometry type at index {i - 1}: {type(smaller_geom)}. "
+                    "Skipping difference, keeping original larger geometry."
+                )
+                continue  # Keep the larger_geom as-is
+
+            # Start with the original larger geometry
+            result_geom = larger_geom
+
+            # Iteratively subtract each polygon from smaller_geom
+            for poly_idx, small_poly in enumerate(smaller_polygons):
+                try:
+                    result_geom = result_geom.difference(small_poly)
+                except Exception as poly_e:
+                    logger.warning(
+                        f"Failed to subtract polygon {poly_idx} from smaller geometry at index {i - 1}: "
+                        f"{type(poly_e).__name__}: {str(poly_e)}. Skipping this polygon."
+                    )
+                    # Skip this problematic polygon, continue with others
+                    continue
+
+            # Update the geometry with the result
+            isochrone.at[i, "geometry"] = result_geom
 
     return isochrone
 
