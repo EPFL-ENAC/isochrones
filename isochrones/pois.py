@@ -152,7 +152,7 @@ def get_osm_files():
     return [
         f.name
         for f in files("isochrones").joinpath("data").iterdir()
-        if f.suffix == ".osm.pbf"
+        if f.name.endswith(".osm.pbf")
     ]
 
 
