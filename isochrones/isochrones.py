@@ -3,6 +3,7 @@ import logging
 from typing import Dict, List, Union, Optional
 import requests
 import geopandas as gpd
+import shapely
 from shapely.geometry import MultiPolygon, Polygon
 
 logger = logging.getLogger(__name__)
@@ -89,7 +90,7 @@ def calculate_isochrones(
     if not overlap:
         try:
             isochrone = make_non_overlapping(isochrone)
-        except Exception as e:
+        except shapely.errors.GEOSException as e:
             logger.warning(
                 f"Failed to make isochrones non-overlapping: {type(e).__name__}: {str(e)}. "
                 "Returning overlapping isochrones instead."
@@ -154,7 +155,7 @@ def make_non_overlapping(isochrone: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
             isochrone.at[i, "geometry"] = isochrone.loc[i, "geometry"].difference(
                 isochrone.loc[i - 1, "geometry"]
             )
-        except Exception as e:
+        except shapely.errors.GEOSException as e:
             # Level 2: Polygon-level recovery
             # The problematic geometry is usually the smaller_geom being subtracted
             logger.warning(
