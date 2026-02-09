@@ -38,7 +38,8 @@ def calculate_isochrones(
         bike_speed (float): The bike speed in km/h, only relevant if mode is "BICYCLE".
         router (str, optional): The router ID to use for the request, defaulting to "default".
         crs (str, optional): The coordinate reference system for the output GeoDataFrame, defaulting to "EPSG:4326".
-        overlap (bool, optional): Whether to return overlapping isochrones or non-overlapping ones. Defaults to True.
+        overlap (bool, optional): Whether to return overlapping isochrones or non-overlapping ones. If the calculation of non-overlapping
+        isochrones fails, overlapping isochrones will be returned instead. Defaults to True.
         area_threshold (float, optional): Minimum area threshold to filter out small polygons within the isochrones, expressed in the area units of the
         specified CRS (e.g. degrees squared for EPSG:4326). Defaults to 1e-6.
     Returns:
