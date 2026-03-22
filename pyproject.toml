@@ -29,6 +29,7 @@ packages = ["isochrones"]
 [dependency-groups]
 dev = [
     "pytest>=8.4.2",
+    "ruff>=0.15.7",
 ]
 
 [build-system]
