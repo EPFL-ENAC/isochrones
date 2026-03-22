@@ -28,4 +28,9 @@ pbf-geneva:
 	@rm -f .data/geneva-*.osm.pbf
 	osmium extract -b 4.7,45.1,10.5,47.8 .data/merged.osm.pbf -o .data/geneva-greater-area-all.osm.pbf
 	osmium tags-filter .data/geneva-greater-area-all.osm.pbf --overwrite -o isochrones/data/geneva-greater-area.osm.pbf \
-		n/amenity,n/healthcare,n/office,n/public_transport,n/shop,n/tourism,a/amenity,a/healthcare,a/office,a/public_transport,a/shop,a/tourism
+		n/amenity,n/healthcare,n/office,n/shop,n/tourism,a/amenity,a/healthcare,a/office,a/shop,a/tourism \
+		n/public_transport,n/highway=bus_stop,n/railway \
+		a/public_transport \
+		nwr/route=bus,tram,train,subway,trolleybus,light_rail,ferry,monorail \
+		r/type=route_master \
+		r/public_transport=stop_area
