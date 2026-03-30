@@ -58,7 +58,20 @@ from isochrones import calculate_isochrones, intersect_isochrones, get_osm_featu
 
 # Development
 
-Generate Geneva OSM PBF file:
+## Requirements
+
+On Linux, run
+
+```bash
+make install-tools
+```
+
+On MacOS, with Homebrew install
+```
+brew install wget osmium-tools
+```
+
+## Generate Geneva OSM PBF file:
 
 ```bash
 make pbf pbf-geneva
