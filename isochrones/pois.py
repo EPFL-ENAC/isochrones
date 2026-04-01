@@ -73,11 +73,15 @@ def filter_routes_by_isochrone(
                 lambda x: any(route_id in routes_in_isochrone for route_id in x)
             )
         ]
+
+        # Collect all variant route IDs from the filtered route_masters
+        filtered_route_ids = set()
+        for variant_ids in filtered_routes["variant_route_ids"]:
+            filtered_route_ids.update(variant_ids)
     else:
         filtered_routes = routes[routes["osm_id"].isin(routes_in_isochrone)]
+        filtered_route_ids = set(filtered_routes["osm_id"])
 
-    # Repeat the process for the stops, only counting those that appear in the filtered routes
-    filtered_route_ids = set(filtered_routes["osm_id"])
     stops_in_filtered_routes = stops[
         stops["route_ids"].apply(
             lambda route_ids: any(
