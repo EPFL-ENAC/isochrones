@@ -89,127 +89,142 @@ def filter_routes_by_isochrone(
     return filtered_routes, stops_in_filtered_routes
 
 
-def group_stops_by_name(
+def group_stops_by_stop_area(
     stops: gpd.GeoDataFrame,
     min_stops_for_buffer: int = 3,
     buffer_radius: float = 0.0005,
 ) -> gpd.GeoDataFrame:
     """
-    Group transit stops by name and create buffered geometries for stops with multiple locations.
+    Group transit stops by stop_area and create buffered geometries for stop groups with multiple locations.
 
-    This utility function groups stops by their 'name' attribute and creates
-    buffered point geometries for stop groups with many locations (e.g., "Central Station"
-    might have 10+ platforms). This improves map visualization by reducing clutter.
+    This function groups stops by their OSM stop_area relation ID, which represents the logical
+    grouping of all physical elements of a transit stop (platforms, stop positions, entrances, etc.).
+    Stops without a stop_area_id remain as individual entries in the output.
 
     Args:
-        stops (gpd.GeoDataFrame): GeoDataFrame of transit stops (from extract_all_transit_stops()
-            or get_transit_stops()). Must have 'name' and 'geometry' columns.
-        min_stops_for_buffer (int, optional): Minimum number of stops with the same name
-            to trigger buffer creation. If a stop name has >= this many locations,
+        stops (gpd.GeoDataFrame): GeoDataFrame of transit stops (from extract_all_transit_stops()).
+            Must have 'stop_area_id', 'stop_area_name', 'osm_id', 'name', and 'geometry' columns.
+        min_stops_for_buffer (int, optional): Minimum number of stops in a stop_area
+            to trigger buffer creation. If a stop_area has >= this many stops,
             a buffer will be created around the centroid. Default: 3.
         buffer_radius (float, optional): Radius for buffer creation (in CRS units,
             typically degrees for EPSG:4326). Default: 0.0005 (~55m at equator).
 
     Returns:
-        gpd.GeoDataFrame: GeoDataFrame with grouped stops. For stop names with
-            >= min_stops_for_buffer locations, geometry is a buffered point (circle).
-            For others, geometry remains the original point. Columns include:
-            - name: Stop name
-            - geometry: Point or buffered Point
-            - stop_count: Number of individual stops grouped into this feature
-            - osm_ids: List of OSM IDs for the grouped stops (new column)
+        gpd.GeoDataFrame: GeoDataFrame with grouped stops. Columns include:
+            - stop_area_id: Stop area OSM ID (or individual stop osm_id if not in a stop_area)
+            - stop_area_name: Stop area name (or individual stop name if not in a stop_area)
+            - geometry: Point or buffered Point (buffered if stop_count >= min_stops_for_buffer)
+            - stop_count: Number of individual stops in this stop_area (1 if ungrouped)
+            - osm_ids: List of OSM IDs for the stops in this group
 
     Raises:
-        ValueError: If 'name' or 'geometry' columns are missing from stops GeoDataFrame.
+        ValueError: If required columns are missing from stops GeoDataFrame.
 
     Examples:
-        >>> # Load transit stops
+        >>> # Load transit stops (includes stop_area information)
         >>> stops = gpd.read_parquet("transit_stops.geoparquet")
         >>> print(f"Original: {len(stops)} stops")
         Original: 110777 stops
 
-        >>> # Group stops by name (default: buffer if 3+ stops share a name)
-        >>> grouped = group_stops_by_name(stops)
-        >>> print(f"Grouped: {len(grouped)} unique stop names")
-        Grouped: 8543 unique stop names
+        >>> # Group stops by stop_area (default: buffer if 3+ stops share a stop_area)
+        >>> grouped = group_stops_by_stop_area(stops)
+        >>> print(f"Grouped: {len(grouped)} unique stop areas")
+        Grouped: 95432 stop areas (includes ungrouped stops)
 
-        >>> # Check which stops got buffered
+        >>> # Check which stop areas got buffered
         >>> buffered = grouped[grouped['stop_count'] >= 3]
-        >>> print(f"Buffered: {len(buffered)} stop groups with 3+ locations")
-        Buffered: 234 stop groups with 3+ locations
+        >>> print(f"Buffered: {len(buffered)} stop areas with 3+ stops")
+        Buffered: 156 stop areas with 3+ stops
 
         >>> # Custom settings: buffer only if 5+ stops, larger radius
-        >>> grouped = group_stops_by_name(
+        >>> grouped = group_stops_by_stop_area(
         ...     stops,
         ...     min_stops_for_buffer=5,
         ...     buffer_radius=0.001  # ~110m at equator
         ... )
 
         >>> # Use in production workflow
-        >>> result = filter_routes_by_isochrone(routes, stops, mapping, isochrone)
-        >>> grouped_stops = group_stops_by_name(result['stops'])
-        >>> # Now visualize grouped_stops on map (fewer markers, cleaner map)
-
-    Performance:
-        - Grouping time: ~100-500ms for 110k stops
-        - Result size: Typically 10-20x smaller than original (110k → 8k stops)
-        - Memory: Minimal overhead (only adds 'stop_count' and 'osm_ids' columns)
-
-    Notes:
-        - **Why group stops?** Many transit systems have stops with identical names
-          but different OSM IDs (e.g., multiple platforms, different operators).
-          Showing all of them on a map creates visual clutter.
-        - **Buffer logic**:
-          * If len(stops with same name) >= min_stops_for_buffer: Create buffer around centroid
-          * Else: Keep original point geometry
-        - **Centroid calculation**: Uses the mean of all stop coordinates for each name
-        - **CRS**: Buffering is done in the input CRS (typically EPSG:4326 degrees)
-          For metric buffers, reproject to a projected CRS before calling this function
+        >>> routes, stops = filter_routes_by_isochrone(routes, stops, isochrone)
+        >>> grouped_stops = group_stops_by_stop_area(stops)
 
     See Also:
-        - extract_all_transit_stops(): Extract all stops from OSM PBF
+        - extract_all_transit_stops(): Extract stops with stop_area information from OSM PBF
         - filter_routes_by_isochrone(): Filter routes and stops by isochrone
     """
-    # TODO: refactor to rely on the stop_area, which is already calculated in extract_all_transit_stops, instead of counting stops here again. This would also allow to use the same stop_area for all stops with the same name, which would make the buffering more consistent.
     # Validate inputs
-    if "name" not in stops.columns:
-        raise ValueError("stops GeoDataFrame must have 'name' column")
+    required_columns = ["stop_area_id", "stop_area_name", "osm_id", "name"]
+    missing_columns = [col for col in required_columns if col not in stops.columns]
+    if missing_columns:
+        raise ValueError(
+            f"stops GeoDataFrame must have columns: {missing_columns}. "
+            "Extract stops with extract_all_transit_stops() to get stop_area information."
+        )
     if stops.geometry is None:
         raise ValueError("stops GeoDataFrame must have geometry")
 
     # Handle empty input
     if stops.empty:
         # Return empty GDF with expected schema
-        result = stops.copy()
-        result["stop_count"] = []
-        result["osm_ids"] = []
+        result = gpd.GeoDataFrame(
+            {
+                "stop_area_id": [],
+                "stop_area_name": [],
+                "geometry": [],
+                "stop_count": [],
+                "osm_ids": [],
+            },
+            crs=stops.crs,
+            geometry="geometry",
+        )
         return result
 
-    # Group by stop name
+    # Separate stops with and without stop_area
+    stops_with_area = stops[stops["stop_area_id"].notna()].copy()
+    stops_without_area = stops[stops["stop_area_id"].isna()].copy()
+
     grouped_data = []
 
-    for name, group in stops.groupby("name"):
-        stop_count = len(group)
-        osm_ids = group["osm_id"].tolist()
+    # Group stops by stop_area_id
+    if not stops_with_area.empty:
+        for stop_area_id, group in stops_with_area.groupby("stop_area_id"):
+            stop_count = len(group)
+            osm_ids = group["osm_id"].tolist()
 
-        # Calculate centroid of all stops with this name
-        centroid = group.geometry.union_all().centroid
+            # Use stop_area_name (consistent across all stops in the group)
+            stop_area_name = group["stop_area_name"].iloc[0]
 
-        # Create buffered geometry if stop count >= threshold
-        if stop_count >= min_stops_for_buffer:
-            geometry = centroid.buffer(buffer_radius)
-        else:
-            geometry = centroid
+            # Calculate centroid of all stops in this stop_area
+            centroid = group.geometry.union_all().centroid
 
-        # Create record
-        record = {
-            "name": name,
-            "geometry": geometry,
-            "stop_count": stop_count,
-            "osm_ids": osm_ids,
-        }
+            # Create buffered geometry if stop count >= threshold
+            if stop_count >= min_stops_for_buffer:
+                geometry = centroid.buffer(buffer_radius)
+            else:
+                geometry = centroid
 
-        grouped_data.append(record)
+            grouped_data.append(
+                {
+                    "stop_area_id": stop_area_id,
+                    "stop_area_name": stop_area_name,
+                    "geometry": geometry,
+                    "stop_count": stop_count,
+                    "osm_ids": osm_ids,
+                }
+            )
+
+    # Add ungrouped stops (no stop_area) as individual entries
+    if not stops_without_area.empty:
+        for _, stop in stops_without_area.iterrows():
+            grouped_data.append(
+                {
+                    "stop_area_id": stop["osm_id"],  # Use stop osm_id as identifier
+                    "stop_area_name": stop["name"],  # Use original stop name
+                    "geometry": stop.geometry,  # Keep original point (no buffer)
+                    "stop_count": 1,
+                    "osm_ids": [stop["osm_id"]],
+                }
+            )
 
     # Create new GeoDataFrame
     result = gpd.GeoDataFrame(

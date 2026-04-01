@@ -7,7 +7,7 @@ from .pois import (
     count_route_stops_in_isochrones,
     filter_routes_by_isochrone,
     get_osm_files,
-    group_stops_by_name,
+    group_stops_by_stop_area,
 )
 
 __all__ = [
@@ -16,6 +16,6 @@ __all__ = [
     "filter_routes_by_isochrone",
     "get_available_modes",
     "get_osm_files",
-    "group_stops_by_name",
+    "group_stops_by_stop_area",
     "intersect_isochrones",
 ]
