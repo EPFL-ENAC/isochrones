@@ -347,10 +347,9 @@ def test_filter_routes_grouped_by_route_master(
 ):
     """Test filtering with routes grouped by route_master.
 
-    Note: When routes are grouped by route_master, the function returns the
-    route_master rows, but the stops are filtered based on whether their
-    route_ids match the route_master osm_id values, not the variant route IDs.
-    This means stops will be empty unless they reference the route_master IDs.
+    When routes are grouped by route_master, the function should:
+    1. Filter route_masters based on whether any variant routes have stops in the isochrone
+    2. Return stops that belong to any of the variant routes in the filtered route_masters
     """
     routes, stops = filter_routes_by_isochrone(
         mock_transit_routes_grouped,
@@ -370,13 +369,23 @@ def test_filter_routes_grouped_by_route_master(
     # Master 203 (tram routes 105, 106) should be included (105 has 2 stops)
     assert len(routes) >= 2, "Should find at least 2 route masters"
 
-    # Note: Stops will be empty because they reference variant route IDs (101-106)
-    # but the function looks for route_master IDs (201-203) when filtering stops.
-    # This is expected behavior - the stops dataframe needs to be pre-processed
-    # to reference route_master IDs if routes are grouped that way.
+    # Verify that stops are correctly filtered based on variant route IDs
+    # Stops should include those belonging to routes 101-106 (variants of included masters)
+    assert len(stops) > 0, "Should find stops belonging to variant routes"
+
+    # Verify specific stops are included:
+    # - Stops 1-3 belong to routes 101, 102 (variants of master 201)
+    # - Stops 4-6 belong to routes 103, 104 (variants of master 202)
+    # - Stops 7-8 belong to routes 105, 106 (variants of master 203)
+    stop_ids = set(stops["osm_id"].tolist())
+    expected_stops = {1, 2, 3, 4, 5, 6, 7, 8}  # All stops inside the isochrone
+    assert stop_ids == expected_stops, (
+        f"Expected stops {expected_stops}, got {stop_ids}"
+    )
+
     print(
         f"✓ test_filter_routes_grouped_by_route_master: Found {len(routes)} "
-        f"route masters (stops={len(stops)} as expected with ID mismatch)"
+        f"route masters, {len(stops)} stops"
     )
 
 
