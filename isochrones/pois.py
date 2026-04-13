@@ -1,6 +1,8 @@
 import geopandas as gpd
 import pandas as pd
 from importlib.resources import files
+from typing import Optional
+from shapely.geometry import Point
 
 
 def get_osm_files():
@@ -19,6 +21,7 @@ def filter_routes_by_isochrone(
     stops: gpd.GeoDataFrame,
     isochrone: gpd.GeoDataFrame,
     min_stops_bus_tram: int = 2,
+    simplify: Optional[float] = None,
 ) -> tuple[gpd.GeoDataFrame, gpd.GeoDataFrame]:
     """
     Filter transit routes by isochrone coverage using pre-extracted data.
@@ -31,6 +34,9 @@ def filter_routes_by_isochrone(
         isochrone (gpd.GeoDataFrame): Isochrone polygon(s) to filter by (from calculate_isochrones()).
         min_stops_bus_tram (int, optional): Minimum number of stops required for bus/tram routes
             to be included. Trains are always included regardless. Default: 2.
+        simplify (Optional[float], optional): If provided, simplifies route geometries using
+            this tolerance value (in CRS units, typically degrees for EPSG:4326).
+            Default: None (no simplification).
 
     Returns:
         tuple[gpd.GeoDataFrame, gpd.GeoDataFrame]: A tuple containing the filtered routes and the stops within those routes.
@@ -89,6 +95,169 @@ def filter_routes_by_isochrone(
             )
         )
     ]
+
+    # Apply geometry simplification if requested
+    if simplify is not None:
+        # Create a copy to avoid SettingWithCopyWarning
+        filtered_routes = filtered_routes.copy()
+        filtered_routes["geometry"] = filtered_routes.geometry.simplify(
+            tolerance=simplify
+        )
+
+    return filtered_routes, stops_in_filtered_routes
+
+
+def filter_routes_by_proximity(
+    routes: gpd.GeoDataFrame,
+    stops: gpd.GeoDataFrame,
+    center_lat: float,
+    center_lon: float,
+    radius: float = 500.0,
+    min_stops: int = 1,
+    simplify: Optional[float] = None,
+) -> tuple[gpd.GeoDataFrame, gpd.GeoDataFrame]:
+    """
+    Filter transit routes by proximity to a center point using circular radius search.
+
+    This function finds all routes that have at least min_stops within a circular
+    radius around a center point. Unlike filter_routes_by_isochrone which uses
+    irregular polygon boundaries, this uses simple distance-based filtering.
+
+    Args:
+        routes (gpd.GeoDataFrame): Pre-extracted transit routes. Must have columns: osm_id, route, ref, network,
+            from, to, geometry.
+        stops (gpd.GeoDataFrame): Pre-extracted transit stops (from extract_all_transit_stops()
+            or loaded from GeoParquet). Must have columns: osm_id, route_ids, transit_mode, geometry.
+        center_lat (float): Latitude of the center point (in EPSG:4326).
+        center_lon (float): Longitude of the center point (in EPSG:4326).
+        radius (float, optional): Search radius in meters. Default: 500.0.
+        min_stops (int, optional): Minimum number of stops required within the radius
+            for a route to be included. Applies to all transit modes equally. Default: 1.
+        simplify (Optional[float], optional): If provided, simplifies route geometries using
+            this tolerance value (in CRS units, typically degrees for EPSG:4326).
+            Default: None (no simplification).
+
+    Returns:
+        tuple[gpd.GeoDataFrame, gpd.GeoDataFrame]: A tuple containing:
+            - Filtered routes with at least min_stops within radius
+            - All stops belonging to those filtered routes (not just stops within radius)
+
+    Raises:
+        ValueError: If required columns are missing from input GeoDataFrames.
+
+    Examples:
+        >>> # Filter routes within 500m of a location
+        >>> routes, stops = filter_routes_by_proximity(
+        ...     routes=all_routes,
+        ...     stops=all_stops,
+        ...     center_lat=46.2044,
+        ...     center_lon=6.1432,
+        ... )
+        >>> print(f"Found {len(routes)} routes within 500m")
+
+        >>> # Larger radius with higher threshold
+        >>> routes, stops = filter_routes_by_proximity(
+        ...     routes=all_routes,
+        ...     stops=all_stops,
+        ...     center_lat=46.2044,
+        ...     center_lon=6.1432,
+        ...     radius=1000.0,  # 1km radius
+        ...     min_stops=3,     # Need 3+ stops within radius
+        ... )
+
+        >>> # With geometry simplification
+        >>> routes, stops = filter_routes_by_proximity(
+        ...     routes=all_routes,
+        ...     stops=all_stops,
+        ...     center_lat=46.2044,
+        ...     center_lon=6.1432,
+        ...     simplify=0.0001,  # Simplify geometry (~11m tolerance at equator)
+        ... )
+
+    Notes:
+        - The function converts to EPSG:3857 (Web Mercator) internally for accurate
+          metric distance calculations, then returns results in the input CRS.
+        - All route types (train, bus, tram, etc.) use the same min_stops threshold,
+          unlike filter_routes_by_isochrone which treats trains differently.
+        - The returned stops include ALL stops from the filtered routes, not just
+          those within the radius. This ensures complete route information.
+        - Supports both grouped (route_master) and ungrouped routes via automatic
+          detection of the 'variant_route_ids' column.
+
+    See Also:
+        - filter_routes_by_isochrone(): Filter routes by isochrone polygon coverage
+        - count_route_stops_in_isochrones(): Count stops per route within polygons
+    """
+    if stops.empty or routes.empty:
+        return routes.iloc[0:0].copy(), stops.iloc[0:0].copy()
+
+    # Store original CRS to return results in same CRS as input
+    original_routes_crs = routes.crs
+    original_stops_crs = stops.crs
+
+    # Create center point in EPSG:4326
+    center_point = Point(center_lon, center_lat)
+    center_gdf = gpd.GeoDataFrame({"id": [1]}, geometry=[center_point], crs="EPSG:4326")
+
+    # Convert to EPSG:3857 (Web Mercator) for accurate metric distance calculations
+    center_gdf = center_gdf.to_crs("EPSG:3857")
+    stops_metric = stops.to_crs("EPSG:3857")
+    routes_metric = routes.to_crs("EPSG:3857")
+
+    # Create circular buffer around center point (radius in meters)
+    buffer_polygon = center_gdf.geometry.iloc[0].buffer(radius)
+    buffer_gdf = gpd.GeoDataFrame(
+        {"id": [1]}, geometry=[buffer_polygon], crs="EPSG:3857"
+    )
+
+    # Use the existing count_route_stops_in_isochrones helper
+    # (it works with any polygon, not just isochrones)
+    stops_per_route = count_route_stops_in_isochrones(stops_metric, buffer_gdf)
+
+    # Filter routes with at least min_stops within radius
+    # Unlike filter_routes_by_isochrone, all transit modes use the same threshold
+    routes_in_radius = stops_per_route[stops_per_route["stop_count"] >= min_stops][
+        "route_ids"
+    ].tolist()
+    routes_in_radius_set = set(routes_in_radius)
+
+    # Check whether the data frame was grouped by route_master or route
+    grouped_by_route_master = False
+    if "variant_route_ids" in routes_metric.columns:
+        grouped_by_route_master = True
+
+    if grouped_by_route_master:
+        filtered_routes = routes_metric[
+            routes_metric["variant_route_ids"].apply(
+                lambda x: any(route_id in routes_in_radius_set for route_id in x)
+            )
+        ]
+    else:
+        filtered_routes = routes_metric[
+            routes_metric["osm_id"].isin(routes_in_radius_set)
+        ]
+
+    # Get all stops that belong to the filtered routes
+    filtered_route_ids = set(filtered_routes["osm_id"])
+    stops_in_filtered_routes = stops_metric[
+        stops_metric["route_ids"].apply(
+            lambda route_ids: any(
+                route_id in filtered_route_ids for route_id in route_ids
+            )
+        )
+    ]
+
+    # Apply geometry simplification if requested
+    if simplify is not None:
+        # Create a copy to avoid SettingWithCopyWarning
+        filtered_routes = filtered_routes.copy()
+        filtered_routes["geometry"] = filtered_routes.geometry.simplify(
+            tolerance=simplify
+        )
+
+    # Convert back to original CRS
+    filtered_routes = filtered_routes.to_crs(original_routes_crs)
+    stops_in_filtered_routes = stops_in_filtered_routes.to_crs(original_stops_crs)
 
     return filtered_routes, stops_in_filtered_routes
 

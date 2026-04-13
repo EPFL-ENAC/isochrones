@@ -10,7 +10,7 @@ import pandas as pd
 import pytest
 from shapely.geometry import LineString, Point, Polygon
 
-from isochrones import filter_routes_by_isochrone
+from isochrones import filter_routes_by_isochrone, filter_routes_by_proximity
 from isochrones.pois import count_route_stops_in_isochrones
 
 
@@ -513,6 +513,421 @@ def test_count_route_stops_edge_cases():
         count_route_stops_in_isochrones(bad_stops, isochrone)
 
     print("✓ test_count_route_stops_edge_cases: Edge cases handled correctly")
+
+
+# ============================================================================
+# Proximity Filtering Tests
+# ============================================================================
+
+
+def test_filter_routes_by_proximity_basic(mock_transit_routes, mock_transit_stops):
+    """Test basic proximity filtering with default 500m radius."""
+    # Use center point near the mock stops (6.140-6.147, 46.200-46.207)
+    routes, stops = filter_routes_by_proximity(
+        mock_transit_routes,
+        mock_transit_stops,
+        center_lat=46.2035,
+        center_lon=6.1435,
+        radius=500.0,  # 500m radius
+    )
+
+    # Check result types
+    assert isinstance(routes, gpd.GeoDataFrame)
+    assert isinstance(stops, gpd.GeoDataFrame)
+
+    # Should find some routes
+    assert len(routes) > 0, "Should find routes within 500m"
+    assert len(stops) > 0, "Should find stops within filtered routes"
+
+    # Results should be subset of input
+    assert len(routes) <= len(mock_transit_routes)
+    assert len(stops) <= len(mock_transit_stops)
+
+    print(
+        f"✓ test_filter_routes_by_proximity_basic: Found {len(routes)} routes, {len(stops)} stops"
+    )
+
+
+def test_filter_routes_by_proximity_radius_threshold(
+    mock_transit_routes, mock_transit_stops
+):
+    """Test different radius thresholds."""
+    center_lat, center_lon = 46.2035, 6.1435
+
+    # Small radius - should find fewer routes
+    routes_small, _ = filter_routes_by_proximity(
+        mock_transit_routes,
+        mock_transit_stops,
+        center_lat=center_lat,
+        center_lon=center_lon,
+        radius=100.0,  # 100m
+    )
+
+    # Large radius - should find more routes
+    routes_large, _ = filter_routes_by_proximity(
+        mock_transit_routes,
+        mock_transit_stops,
+        center_lat=center_lat,
+        center_lon=center_lon,
+        radius=2000.0,  # 2km
+    )
+
+    # Large radius should find more or equal routes
+    assert len(routes_large) >= len(routes_small), (
+        "Larger radius should find more or equal routes"
+    )
+
+    print(
+        f"✓ test_filter_routes_by_proximity_radius_threshold: Small={len(routes_small)}, "
+        f"Large={len(routes_large)} routes"
+    )
+
+
+def test_filter_routes_by_proximity_min_stops_threshold(
+    mock_transit_routes, mock_transit_stops
+):
+    """Test different min_stops thresholds."""
+    center_lat, center_lon = 46.2035, 6.1435
+
+    # Lenient filter (min_stops=1)
+    routes_lenient, _ = filter_routes_by_proximity(
+        mock_transit_routes,
+        mock_transit_stops,
+        center_lat=center_lat,
+        center_lon=center_lon,
+        radius=500.0,
+        min_stops=1,
+    )
+
+    # Strict filter (min_stops=3)
+    routes_strict, _ = filter_routes_by_proximity(
+        mock_transit_routes,
+        mock_transit_stops,
+        center_lat=center_lat,
+        center_lon=center_lon,
+        radius=500.0,
+        min_stops=3,
+    )
+
+    # Strict should return fewer or equal routes
+    assert len(routes_strict) <= len(routes_lenient), (
+        "Stricter min_stops should return fewer or equal routes"
+    )
+
+    print(
+        f"✓ test_filter_routes_by_proximity_min_stops_threshold: Lenient={len(routes_lenient)}, "
+        f"Strict={len(routes_strict)} routes"
+    )
+
+
+def test_filter_routes_by_proximity_empty_inputs():
+    """Test that empty inputs are handled gracefully."""
+    empty_routes = gpd.GeoDataFrame(
+        columns=["osm_id", "route", "geometry"], crs="EPSG:4326"
+    )
+    empty_stops = gpd.GeoDataFrame(
+        columns=["osm_id", "route_ids", "transit_mode", "geometry"], crs="EPSG:4326"
+    )
+
+    routes, stops = filter_routes_by_proximity(
+        empty_routes,
+        empty_stops,
+        center_lat=46.2044,
+        center_lon=6.1432,
+    )
+
+    assert isinstance(routes, gpd.GeoDataFrame)
+    assert isinstance(stops, gpd.GeoDataFrame)
+    assert routes.empty
+    assert stops.empty
+
+    print(
+        "✓ test_filter_routes_by_proximity_empty_inputs: Empty inputs handled correctly"
+    )
+
+
+def test_filter_routes_by_proximity_no_matches(mock_transit_routes, mock_transit_stops):
+    """Test when no routes are within radius."""
+    # Use a center point far from all stops
+    routes, stops = filter_routes_by_proximity(
+        mock_transit_routes,
+        mock_transit_stops,
+        center_lat=47.5000,  # Far from test data
+        center_lon=7.5000,
+        radius=500.0,
+    )
+
+    assert isinstance(routes, gpd.GeoDataFrame)
+    assert isinstance(stops, gpd.GeoDataFrame)
+    assert len(routes) == 0
+    assert len(stops) == 0
+
+    print("✓ test_filter_routes_by_proximity_no_matches: No matches handled correctly")
+
+
+def test_filter_routes_by_proximity_crs_handling(
+    mock_transit_routes, mock_transit_stops
+):
+    """Test that CRS conversion is handled correctly."""
+    # Convert to Web Mercator (EPSG:3857)
+    routes_3857 = mock_transit_routes.to_crs("EPSG:3857")
+    stops_3857 = mock_transit_stops.to_crs("EPSG:3857")
+
+    # Center point is provided in EPSG:4326 (always)
+    routes, stops = filter_routes_by_proximity(
+        routes_3857,
+        stops_3857,
+        center_lat=46.2035,
+        center_lon=6.1435,
+        radius=500.0,
+    )
+
+    # Results should be in the original input CRS (EPSG:3857)
+    assert routes.crs == routes_3857.crs
+    assert stops.crs == stops_3857.crs
+
+    # Should still find results despite different input CRS
+    assert len(routes) > 0, "Should find routes despite CRS mismatch"
+
+    print(
+        "✓ test_filter_routes_by_proximity_crs_handling: CRS conversion handled correctly"
+    )
+
+
+def test_filter_routes_by_proximity_grouped_routes(
+    mock_transit_routes_grouped, mock_transit_stops
+):
+    """Test proximity filtering with grouped routes (route_master)."""
+    routes, stops = filter_routes_by_proximity(
+        mock_transit_routes_grouped,
+        mock_transit_stops,
+        center_lat=46.2035,
+        center_lon=6.1435,
+        radius=500.0,
+        min_stops=1,
+    )
+
+    # Should find route masters
+    assert len(routes) > 0, "Should find route masters within radius"
+
+    # Verify variant_route_ids column exists
+    assert "variant_route_ids" in routes.columns
+
+    print(
+        f"✓ test_filter_routes_by_proximity_grouped_routes: Found {len(routes)} "
+        f"route masters (stops={len(stops)})"
+    )
+
+
+def test_filter_routes_by_proximity_all_modes_equal():
+    """Test that all transit modes use the same min_stops threshold."""
+    # Create stops with different modes at the same location
+    stops = gpd.GeoDataFrame(
+        {
+            "osm_id": [1, 2, 3],
+            "route_ids": [[101], [102], [103]],
+            "transit_mode": ["train", "bus", "tram"],
+            "geometry": [
+                Point(6.140, 46.200),
+                Point(6.141, 46.201),
+                Point(6.142, 46.202),
+            ],
+        },
+        crs="EPSG:4326",
+    )
+
+    routes = gpd.GeoDataFrame(
+        {
+            "osm_id": [101, 102, 103],
+            "route": ["train", "bus", "tram"],
+            "ref": ["T1", "1", "12"],
+            "network": ["TPG"] * 3,
+            "from": ["Station A"] * 3,
+            "to": ["Station B"] * 3,
+            "geometry": [
+                LineString([(6.140, 46.200), (6.150, 46.210)]),
+                LineString([(6.141, 46.201), (6.151, 46.211)]),
+                LineString([(6.142, 46.202), (6.152, 46.212)]),
+            ],
+        },
+        crs="EPSG:4326",
+    )
+
+    # Filter with min_stops=1 - should include all routes
+    routes_filtered, _ = filter_routes_by_proximity(
+        routes,
+        stops,
+        center_lat=46.2005,
+        center_lon=6.1415,
+        radius=500.0,
+        min_stops=1,
+    )
+
+    # All route types should be included (each has 1 stop)
+    assert len(routes_filtered) == 3, "All routes should be included with min_stops=1"
+
+    print(
+        "✓ test_filter_routes_by_proximity_all_modes_equal: All modes treated equally"
+    )
+
+
+def test_filter_routes_by_proximity_returns_all_stops(
+    mock_transit_routes, mock_transit_stops
+):
+    """Test that returned stops include ALL stops from filtered routes, not just those in radius."""
+    # Filter with a specific location
+    routes, stops = filter_routes_by_proximity(
+        mock_transit_routes,
+        mock_transit_stops,
+        center_lat=46.200,
+        center_lon=6.140,
+        radius=300.0,  # Small radius
+        min_stops=1,
+    )
+
+    # If we found routes, verify that ALL stops from those routes are returned
+    if len(routes) > 0:
+        route_ids = set(routes["osm_id"])
+
+        # Get all stops that reference these routes
+        expected_stops = mock_transit_stops[
+            mock_transit_stops["route_ids"].apply(
+                lambda rids: any(rid in route_ids for rid in rids)
+            )
+        ]
+
+        # The returned stops should match all stops from filtered routes
+        # (not just stops within the radius)
+        assert len(stops) == len(expected_stops), (
+            "Should return ALL stops from filtered routes, not just those in radius"
+        )
+
+    print(
+        "✓ test_filter_routes_by_proximity_returns_all_stops: All route stops returned"
+    )
+
+
+# ============================================================================
+# Geometry Simplification Tests
+# ============================================================================
+
+
+def test_filter_routes_by_isochrone_simplify_none(
+    mock_transit_routes, mock_transit_stops, mock_isochrone_small
+):
+    """Test that simplify=None (default) doesn't change geometry."""
+    routes_no_simplify, _ = filter_routes_by_isochrone(
+        mock_transit_routes,
+        mock_transit_stops,
+        mock_isochrone_small,
+    )
+
+    routes_explicit_none, _ = filter_routes_by_isochrone(
+        mock_transit_routes,
+        mock_transit_stops,
+        mock_isochrone_small,
+        simplify=None,
+    )
+
+    # Results should be identical
+    assert len(routes_no_simplify) == len(routes_explicit_none)
+
+    print("✓ test_filter_routes_by_isochrone_simplify_none: Default behavior preserved")
+
+
+def test_filter_routes_by_isochrone_simplify_applies(
+    mock_transit_routes, mock_transit_stops, mock_isochrone_small
+):
+    """Test that simplify parameter simplifies route geometries."""
+    routes_original, _ = filter_routes_by_isochrone(
+        mock_transit_routes,
+        mock_transit_stops,
+        mock_isochrone_small,
+        simplify=None,
+    )
+
+    routes_simplified, _ = filter_routes_by_isochrone(
+        mock_transit_routes,
+        mock_transit_stops,
+        mock_isochrone_small,
+        simplify=0.01,  # Large tolerance for testing
+    )
+
+    # Both should return same number of routes
+    assert len(routes_original) == len(routes_simplified)
+
+    # Geometry should be simplified (may have fewer coordinates)
+    # Note: For simple LineStrings, simplification might not always reduce points,
+    # but the operation should complete without error
+    assert isinstance(routes_simplified, gpd.GeoDataFrame)
+    assert "geometry" in routes_simplified.columns
+
+    print("✓ test_filter_routes_by_isochrone_simplify_applies: Simplification applied")
+
+
+def test_filter_routes_by_isochrone_simplify_doesnt_affect_stops(
+    mock_transit_routes, mock_transit_stops, mock_isochrone_small
+):
+    """Test that simplify doesn't affect stop geometries."""
+    _, stops_original = filter_routes_by_isochrone(
+        mock_transit_routes,
+        mock_transit_stops,
+        mock_isochrone_small,
+        simplify=None,
+    )
+
+    _, stops_with_simplify = filter_routes_by_isochrone(
+        mock_transit_routes,
+        mock_transit_stops,
+        mock_isochrone_small,
+        simplify=0.01,
+    )
+
+    # Stops should be identical (points don't get simplified)
+    assert len(stops_original) == len(stops_with_simplify)
+
+    # Check that geometries are the same
+    if len(stops_original) > 0:
+        # Use individual comparison for each geometry
+        for i in range(len(stops_original)):
+            assert stops_original.geometry.iloc[i].equals(
+                stops_with_simplify.geometry.iloc[i]
+            )
+
+    print(
+        "✓ test_filter_routes_by_isochrone_simplify_doesnt_affect_stops: Stops unchanged"
+    )
+
+
+def test_filter_routes_by_proximity_simplify(mock_transit_routes, mock_transit_stops):
+    """Test simplify parameter with proximity filtering."""
+    routes_original, _ = filter_routes_by_proximity(
+        mock_transit_routes,
+        mock_transit_stops,
+        center_lat=46.2035,
+        center_lon=6.1435,
+        radius=500.0,
+        simplify=None,
+    )
+
+    routes_simplified, _ = filter_routes_by_proximity(
+        mock_transit_routes,
+        mock_transit_stops,
+        center_lat=46.2035,
+        center_lon=6.1435,
+        radius=500.0,
+        simplify=0.01,
+    )
+
+    # Should return same number of routes
+    assert len(routes_original) == len(routes_simplified)
+
+    # Simplification should complete without error
+    assert isinstance(routes_simplified, gpd.GeoDataFrame)
+
+    print(
+        "✓ test_filter_routes_by_proximity_simplify: Simplification works with proximity filter"
+    )
 
 
 # ============================================================================
