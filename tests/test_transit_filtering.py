@@ -807,6 +807,175 @@ def test_filter_routes_by_proximity_returns_all_stops(
     )
 
 
+def test_filter_routes_by_proximity_with_isochrone(
+    mock_transit_routes, mock_transit_stops, mock_isochrone_small
+):
+    """Test proximity filtering with isochrone pre-clipping optimization."""
+    routes, stops = filter_routes_by_proximity(
+        mock_transit_routes,
+        mock_transit_stops,
+        center_lat=46.2035,
+        center_lon=6.1435,
+        radius=500.0,
+        isochrone=mock_isochrone_small,
+    )
+
+    # Should find routes within the isochrone
+    assert len(routes) > 0, "Should find routes with isochrone"
+    assert len(stops) > 0, "Should find stops with isochrone"
+
+    # Results should be same or subset of without isochrone
+    # (because isochrone pre-filters the dataset)
+
+    print(
+        f"✓ test_filter_routes_by_proximity_with_isochrone: Found {len(routes)} routes, "
+        f"{len(stops)} stops with isochrone"
+    )
+
+
+def test_filter_routes_by_proximity_isochrone_empty():
+    """Test that empty results are returned when isochrone doesn't overlap stops."""
+    # Create stops far from isochrone
+    stops = gpd.GeoDataFrame(
+        {
+            "osm_id": [1, 2],
+            "route_ids": [[101], [101]],
+            "transit_mode": ["bus", "bus"],
+            "geometry": [
+                Point(7.0, 47.0),  # Far from isochrone
+                Point(7.1, 47.1),
+            ],
+        },
+        crs="EPSG:4326",
+    )
+
+    routes = gpd.GeoDataFrame(
+        {
+            "osm_id": [101],
+            "route": ["bus"],
+            "ref": ["1"],
+            "network": ["TPG"],
+            "from": ["A"],
+            "to": ["B"],
+            "geometry": [LineString([(7.0, 47.0), (7.1, 47.1)])],
+        },
+        crs="EPSG:4326",
+    )
+
+    # Isochrone in Geneva (far from stops)
+    isochrone = gpd.GeoDataFrame(
+        {
+            "time": [600],
+            "geometry": [
+                Polygon(
+                    [
+                        (6.139, 46.199),
+                        (6.148, 46.199),
+                        (6.148, 46.208),
+                        (6.139, 46.208),
+                        (6.139, 46.199),
+                    ]
+                )
+            ],
+        },
+        crs="EPSG:4326",
+    )
+
+    # Filter with isochrone that doesn't overlap
+    filtered_routes, filtered_stops = filter_routes_by_proximity(
+        routes,
+        stops,
+        center_lat=46.2035,
+        center_lon=6.1435,
+        radius=500.0,
+        isochrone=isochrone,
+    )
+
+    # Should return empty results (no stops in isochrone)
+    assert len(filtered_routes) == 0, (
+        "Should return no routes when isochrone doesn't overlap"
+    )
+    assert len(filtered_stops) == 0, (
+        "Should return no stops when isochrone doesn't overlap"
+    )
+
+    print("✓ test_filter_routes_by_proximity_isochrone_empty: Empty isochrone handled")
+
+
+def test_filter_routes_by_proximity_isochrone_crs_mismatch(
+    mock_transit_routes, mock_transit_stops, mock_isochrone_small
+):
+    """Test isochrone clipping with CRS mismatch."""
+    # Convert stops to EPSG:3857
+    stops_3857 = mock_transit_stops.to_crs("EPSG:3857")
+
+    # Isochrone stays in EPSG:4326
+    routes, stops = filter_routes_by_proximity(
+        mock_transit_routes,
+        stops_3857,
+        center_lat=46.2035,
+        center_lon=6.1435,
+        radius=500.0,
+        isochrone=mock_isochrone_small,
+    )
+
+    # Should handle CRS mismatch gracefully
+    assert routes.crs == mock_transit_routes.crs, "Routes should be in original CRS"
+    assert stops.crs == stops_3857.crs, "Stops should be in original CRS"
+    assert len(routes) > 0, "Should find routes despite CRS mismatch"
+
+    print(
+        "✓ test_filter_routes_by_proximity_isochrone_crs_mismatch: CRS mismatch handled"
+    )
+
+
+def test_filter_routes_by_proximity_none_isochrone(
+    mock_transit_routes, mock_transit_stops
+):
+    """Test that isochrone=None works (backward compatibility)."""
+    routes, stops = filter_routes_by_proximity(
+        mock_transit_routes,
+        mock_transit_stops,
+        center_lat=46.2035,
+        center_lon=6.1435,
+        isochrone=None,  # Explicit None
+    )
+
+    # Should work without isochrone
+    assert len(routes) > 0, "Should work with isochrone=None"
+    assert len(stops) > 0, "Should work with isochrone=None"
+
+    print(
+        "✓ test_filter_routes_by_proximity_none_isochrone: Backward compatibility maintained"
+    )
+
+
+def test_filter_routes_by_proximity_isochrone_grouped_routes(
+    mock_transit_routes_grouped, mock_transit_stops, mock_isochrone_small
+):
+    """Test isochrone optimization with grouped routes (route_master)."""
+    routes, stops = filter_routes_by_proximity(
+        mock_transit_routes_grouped,
+        mock_transit_stops,
+        center_lat=46.2035,
+        center_lon=6.1435,
+        radius=500.0,
+        min_stops=1,
+        isochrone=mock_isochrone_small,
+    )
+
+    # Should find route masters
+    assert len(routes) > 0, "Should find route masters with isochrone"
+
+    # Verify variant_route_ids column exists
+    assert "variant_route_ids" in routes.columns
+
+    print(
+        f"✓ test_filter_routes_by_proximity_isochrone_grouped_routes: Found {len(routes)} "
+        f"route masters with isochrone"
+    )
+
+
 # ============================================================================
 # Geometry Simplification Tests
 # ============================================================================

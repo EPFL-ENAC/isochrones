@@ -115,6 +115,7 @@ def filter_routes_by_proximity(
     radius: float = 500.0,
     min_stops: int = 1,
     simplify: Optional[float] = None,
+    isochrone: Optional[gpd.GeoDataFrame] = None,
 ) -> tuple[gpd.GeoDataFrame, gpd.GeoDataFrame]:
     """
     Filter transit routes by proximity to a center point using circular radius search.
@@ -136,6 +137,8 @@ def filter_routes_by_proximity(
         simplify (Optional[float], optional): If provided, simplifies route geometries using
             this tolerance value (in CRS units, typically degrees for EPSG:4326).
             Default: None (no simplification).
+        isochrone (Optional[gpd.GeoDataFrame], optional): Pre-computed isochrone polygon(s)
+            for pre-filtering stops before distance calculation. Default: None.
 
     Returns:
         tuple[gpd.GeoDataFrame, gpd.GeoDataFrame]: A tuple containing:
@@ -146,7 +149,7 @@ def filter_routes_by_proximity(
         ValueError: If required columns are missing from input GeoDataFrames.
 
     Examples:
-        >>> # Filter routes within 500m of a location
+        >>> # Basic usage (processes all stops - slower for large datasets)
         >>> routes, stops = filter_routes_by_proximity(
         ...     routes=all_routes,
         ...     stops=all_stops,
@@ -155,14 +158,20 @@ def filter_routes_by_proximity(
         ... )
         >>> print(f"Found {len(routes)} routes within 500m")
 
-        >>> # Larger radius with higher threshold
+        >>> # Optimized usage with isochrone
+        >>> # First calculate isochrone for the area
+        >>> isochrone = calculate_isochrones(
+        ...     lat=46.2044, lon=6.1432, cutoffSec=[600],
+        ...     date_time=datetime.now(), mode="WALK", otp_url="..."
+        ... )
+        >>>
+        >>> # Then use it to accelerate proximity filtering
         >>> routes, stops = filter_routes_by_proximity(
         ...     routes=all_routes,
         ...     stops=all_stops,
         ...     center_lat=46.2044,
         ...     center_lon=6.1432,
-        ...     radius=1000.0,  # 1km radius
-        ...     min_stops=3,     # Need 3+ stops within radius
+        ...     isochrone=isochrone,
         ... )
 
         >>> # With geometry simplification
@@ -172,92 +181,110 @@ def filter_routes_by_proximity(
         ...     center_lat=46.2044,
         ...     center_lon=6.1432,
         ...     simplify=0.0001,  # Simplify geometry (~11m tolerance at equator)
+        ...     isochrone=isochrone,
         ... )
-
-    Notes:
-        - The function converts to EPSG:3857 (Web Mercator) internally for accurate
-          metric distance calculations, then returns results in the input CRS.
-        - All route types (train, bus, tram, etc.) use the same min_stops threshold,
-          unlike filter_routes_by_isochrone which treats trains differently.
-        - The returned stops include ALL stops from the filtered routes, not just
-          those within the radius. This ensures complete route information.
-        - Supports both grouped (route_master) and ungrouped routes via automatic
-          detection of the 'variant_route_ids' column.
 
     See Also:
         - filter_routes_by_isochrone(): Filter routes by isochrone polygon coverage
         - count_route_stops_in_isochrones(): Count stops per route within polygons
+        - calculate_isochrones(): Create isochrone polygons for your area
     """
     if stops.empty or routes.empty:
         return routes.iloc[0:0].copy(), stops.iloc[0:0].copy()
 
-    # Store original CRS to return results in same CRS as input
-    original_routes_crs = routes.crs
-    original_stops_crs = stops.crs
+    if isochrone is not None:
+        # Ensure same CRS for clipping
+        if stops.crs != isochrone.crs:
+            stops_to_clip = stops.to_crs(isochrone.crs)
+        else:
+            stops_to_clip = stops
 
-    # Create center point in EPSG:4326
+        # Spatial join to clip stops to isochrone boundary
+        stops_clipped = gpd.sjoin(
+            stops_to_clip, isochrone, how="inner", predicate="within"
+        )
+
+        # Remove join artifacts (columns ending with _right, index_right, etc.)
+        cols_to_drop = [
+            col for col in stops_clipped.columns if col.endswith("_right")
+        ] + ["index_right"]
+        stops_clipped = stops_clipped.drop(columns=cols_to_drop, errors="ignore")
+
+        # Use clipped stops for distance calculation (much smaller dataset!)
+        stops_for_distance = stops_clipped
+
+        # If no stops in isochrone, return empty results
+        if stops_for_distance.empty:
+            return routes.iloc[0:0].copy(), stops.iloc[0:0].copy()
+    else:
+        # No isochrone provided - process all stops (slower)
+        stops_for_distance = stops
+
+    # Check if input is already projected (metric)
+    try:
+        if stops_for_distance.crs.is_projected:
+            working_crs = stops_for_distance.crs
+        else:
+            working_crs = "EPSG:3857"
+    except AttributeError:
+        # Fallback for older geopandas versions without is_projected
+        working_crs = "EPSG:3857"
+
     center_point = Point(center_lon, center_lat)
     center_gdf = gpd.GeoDataFrame({"id": [1]}, geometry=[center_point], crs="EPSG:4326")
-
-    # Convert to EPSG:3857 (Web Mercator) for accurate metric distance calculations
-    center_gdf = center_gdf.to_crs("EPSG:3857")
-    stops_metric = stops.to_crs("EPSG:3857")
-    routes_metric = routes.to_crs("EPSG:3857")
+    center_gdf = center_gdf.to_crs(working_crs)
 
     # Create circular buffer around center point (radius in meters)
     buffer_polygon = center_gdf.geometry.iloc[0].buffer(radius)
     buffer_gdf = gpd.GeoDataFrame(
-        {"id": [1]}, geometry=[buffer_polygon], crs="EPSG:3857"
+        {"id": [1]}, geometry=[buffer_polygon], crs=working_crs
     )
 
-    # Use the existing count_route_stops_in_isochrones helper
-    # (it works with any polygon, not just isochrones)
+    if stops_for_distance.crs != working_crs:
+        stops_metric = stops_for_distance.to_crs(working_crs)
+    else:
+        stops_metric = stops_for_distance
+
     stops_per_route = count_route_stops_in_isochrones(stops_metric, buffer_gdf)
 
-    # Filter routes with at least min_stops within radius
-    # Unlike filter_routes_by_isochrone, all transit modes use the same threshold
     routes_in_radius = stops_per_route[stops_per_route["stop_count"] >= min_stops][
         "route_ids"
     ].tolist()
     routes_in_radius_set = set(routes_in_radius)
 
-    # Check whether the data frame was grouped by route_master or route
-    grouped_by_route_master = False
-    if "variant_route_ids" in routes_metric.columns:
-        grouped_by_route_master = True
+    # Check whether routes are grouped by route_master
+    grouped_by_route_master = "variant_route_ids" in routes.columns
 
+    # Filter routes (work in ORIGINAL CRS - no conversion needed!)
     if grouped_by_route_master:
-        filtered_routes = routes_metric[
-            routes_metric["variant_route_ids"].apply(
+        filtered_routes = routes[
+            routes["variant_route_ids"].apply(
                 lambda x: any(route_id in routes_in_radius_set for route_id in x)
             )
         ]
-    else:
-        filtered_routes = routes_metric[
-            routes_metric["osm_id"].isin(routes_in_radius_set)
-        ]
 
-    # Get all stops that belong to the filtered routes
-    filtered_route_ids = set(filtered_routes["osm_id"])
-    stops_in_filtered_routes = stops_metric[
-        stops_metric["route_ids"].apply(
+        # Collect all variant route IDs from filtered route_masters
+        filtered_route_ids = set()
+        for variant_ids in filtered_routes["variant_route_ids"]:
+            filtered_route_ids.update(variant_ids)
+    else:
+        filtered_routes = routes[routes["osm_id"].isin(routes_in_radius_set)]
+        filtered_route_ids = set(filtered_routes["osm_id"])
+
+    stops_in_filtered_routes = stops[
+        stops["route_ids"].apply(
             lambda route_ids: any(
                 route_id in filtered_route_ids for route_id in route_ids
             )
         )
     ]
 
-    # Apply geometry simplification if requested
     if simplify is not None:
         # Create a copy to avoid SettingWithCopyWarning
         filtered_routes = filtered_routes.copy()
         filtered_routes["geometry"] = filtered_routes.geometry.simplify(
             tolerance=simplify
         )
-
-    # Convert back to original CRS
-    filtered_routes = filtered_routes.to_crs(original_routes_crs)
-    stops_in_filtered_routes = stops_in_filtered_routes.to_crs(original_stops_crs)
 
     return filtered_routes, stops_in_filtered_routes
 
